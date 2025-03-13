@@ -24,31 +24,45 @@ public class LogPacket {
     }
 
     public String formatLog() {
-        StringBuilder builder = new StringBuilder();
-        builder.append("[").append(dateFormat.format(time)).append("] ");
-        switch (level) {
-            case ImtpLogger.LEVEL_TRACE -> builder.append("[TRACE] ");
-            case ImtpLogger.LEVEL_DEBUG -> builder.append("[DEBUG] ");
-            case ImtpLogger.LEVEL_INFO -> builder.append("[INFO] ");
-            case ImtpLogger.LEVEL_WARN -> builder.append("[WARN] ");
-            case ImtpLogger.LEVEL_ERROR -> builder.append("[ERROR] ");
-            default -> builder.append("[default] ");
-        }
-        for (Object arg : args) {
-            if (arg instanceof Exception exception) {
-                String className = exception.getClass().getName();
-                String exceptionMessage = exception.getMessage();
-                StackTraceElement[] stackTrace = exception.getStackTrace();
-                builder.append("\n").append(className).append(": ").append(exceptionMessage);
-                for (StackTraceElement stackTraceElement : stackTrace) {
-                    builder.append("\n").append(stackTraceElement.toString());
-                }
-            } else {
-                message = message.replaceFirst("\\$", arg == null ? "null" : arg.toString());
+        try {
+            StringBuilder messageBuilder = new StringBuilder();
+            messageBuilder.append("[").append(dateFormat.format(time)).append("] ");
+            switch (level) {
+                case ImtpLogger.LEVEL_TRACE -> messageBuilder.append("[TRACE] ");
+                case ImtpLogger.LEVEL_DEBUG -> messageBuilder.append("[DEBUG] ");
+                case ImtpLogger.LEVEL_INFO -> messageBuilder.append("[INFO] ");
+                case ImtpLogger.LEVEL_WARN -> messageBuilder.append("[WARN] ");
+                case ImtpLogger.LEVEL_ERROR -> messageBuilder.append("[ERROR] ");
+                default -> messageBuilder.append("[default] ");
             }
+            for (Object arg : args) {
+                if (arg instanceof Exception exception) {
+                    StringBuilder exceptionBuilder = new StringBuilder();
+                    String className = exception.getClass().getName();
+                    String exceptionMessage = exception.getMessage();
+                    StackTraceElement[] stackTrace = exception.getStackTrace();
+                    exceptionBuilder.append("\n").append(className).append(": ").append(exceptionMessage);
+                    for (StackTraceElement stackTraceElement : stackTrace) {
+                        exceptionBuilder.append("\n").append(stackTraceElement.toString());
+                    }
+                    message = String.format("%s%s", message, exceptionBuilder);
+                } else {
+                    message = message.replaceFirst("\\$", arg == null ? "null" : arg.toString());
+                }
+            }
+            messageBuilder.append("{ ").append(message).append(" }");
+            return messageBuilder.toString();
+        } catch (Exception e) {
+            StringBuilder exceptionBuilder = new StringBuilder();
+            String className = e.getClass().getName();
+            String exceptionMessage = e.getMessage();
+            StackTraceElement[] stackTrace = e.getStackTrace();
+            exceptionBuilder.append("\n").append(className).append(": ").append(exceptionMessage);
+            for (StackTraceElement stackTraceElement : stackTrace) {
+                exceptionBuilder.append("\n").append(stackTraceElement.toString());
+            }
+            return exceptionBuilder.toString();
         }
-        builder.append("{").append(message).append("}");
-        return builder.toString();
     }
 
     public void setDateFormat(SimpleDateFormat dateFormat) {

@@ -8,6 +8,7 @@ import imtp.client.datapacket.databody.TextDataBody;
 import imtp.client.log.ImtpLogger;
 import imtp.client.process.ProcessingHub;
 import imtp.client.security.Secure;
+import imtp.client.util.Tool;
 
 import javax.crypto.*;
 import java.io.IOException;
@@ -261,7 +262,7 @@ public class LinkManager extends Thread {
         threadPool.submit(() -> {
             DataPacket dataPacket = new DataPacket();
             try {
-                if (!dataPacket.read(selectionKey)) {
+                if (!dataPacket.read(selectionKey, processingHub)) {
                     cancel(selectionKey, "服务端主动关闭");
                     return;
                 }
@@ -273,8 +274,8 @@ public class LinkManager extends Thread {
                 return;
             } catch (InvalidAlgorithmParameterException | NoSuchPaddingException | NoSuchAlgorithmException |
                      InvalidKeyException | ShortBufferException | IllegalBlockSizeException | BadPaddingException e) {
-                imtpLogger.log(ImtpLogger.LEVEL_ERROR, "接收数据包时AES出错", e);
-                cancel(selectionKey, "接收数据包时AES出错");
+                imtpLogger.log(ImtpLogger.LEVEL_ERROR, "接收数据包时出错", e);
+                cancel(selectionKey, "接收数据包时出错");
                 return;
             } finally {
                 sendStateHashMap.put(selectionKey, SendState.Leisure);
@@ -303,6 +304,9 @@ public class LinkManager extends Thread {
                             register(fileLinkChannel, "fileLink");
                             SelectionKey fileSelectionKey = linkTable.getFileSelectionKey();
                             if (fileSelectionKey != null) {
+                                for (int i = 0; fileSelectionKey.attachment() == null && i < 100; i++) {
+                                    Tool.sleep();
+                                }
                                 putDataPacket(fileSelectionKey, new DataPacket(Way.TOKEN_VERIFY, new TextDataBody(linkTable.getToken())));
                                 imtpLogger.log(ImtpLogger.LEVEL_DEBUG, "FileLink已向服务器提交Token");
                                 for (DataPacket cacheDataPacket : linkTable.getCacheDataPacketQueue()) {
@@ -330,14 +334,14 @@ public class LinkManager extends Thread {
     private void sendDataPacket(SelectionKey selectionKey, DataPacket dataPacket) {
         threadPool.submit(() -> {
             try {
-                dataPacket.write(selectionKey);
+                dataPacket.write(selectionKey, processingHub.getSendTransferSchedule(dataPacket.getTaskId()));
             } catch (IOException e) {
                 cancel(selectionKey, "发送数据包时连接中断");
                 return;
             } catch (InvalidAlgorithmParameterException | NoSuchPaddingException | ShortBufferException |
                      IllegalBlockSizeException | NoSuchAlgorithmException | BadPaddingException | InvalidKeyException e) {
-                imtpLogger.log(ImtpLogger.LEVEL_ERROR, "发送数据包时AES出错", e);
-                cancel(selectionKey, "发送数据包时AES出错");
+                imtpLogger.log(ImtpLogger.LEVEL_ERROR, "发送数据包时出错", e);
+                cancel(selectionKey, "发送数据包时出错");
                 return;
             } finally {
                 sendStateHashMap.put(selectionKey, SendState.Leisure);

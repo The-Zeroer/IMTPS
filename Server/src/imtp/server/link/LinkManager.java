@@ -237,7 +237,7 @@ public abstract class LinkManager extends Thread {
         threadPool.submit(() -> {
             DataPacket dataPacket = new DataPacket();
             try {
-                if (!dataPacket.read(selectionKey)) {
+                if (!dataPacket.read(selectionKey, processingHub)) {
                     cancel(selectionKey, "客户端主动关闭");
                     return;
                 }
@@ -246,8 +246,8 @@ public abstract class LinkManager extends Thread {
                 return;
             } catch (InvalidAlgorithmParameterException | NoSuchPaddingException | NoSuchAlgorithmException |
                      InvalidKeyException | ShortBufferException | IllegalBlockSizeException | BadPaddingException e) {
-                imtpLogger.log(ImtpLogger.LEVEL_ERROR, "接收数据包时AES出错", e);
-                cancel(selectionKey, "接收数据包时AES出错");
+                imtpLogger.log(ImtpLogger.LEVEL_ERROR, "接收数据包时出错", e);
+                cancel(selectionKey, "接收数据包时出错");
                 return;
             } finally {
                 sendStateHashMap.put(selectionKey, SendState.Leisure);
@@ -284,14 +284,14 @@ public abstract class LinkManager extends Thread {
     private void sendDataPacket(SelectionKey selectionKey, DataPacket dataPacket) {
         threadPool.submit(() -> {
             try {
-                dataPacket.write(selectionKey);
+                dataPacket.write(selectionKey, processingHub.getSendTransferSchedule(dataPacket.getTaskId()));
             } catch (IOException e) {
                 cancel(selectionKey, "发送数据包时连接中断");
                 return;
             } catch (InvalidAlgorithmParameterException | NoSuchPaddingException | NoSuchAlgorithmException |
                      InvalidKeyException | ShortBufferException | IllegalBlockSizeException | BadPaddingException e) {
-                imtpLogger.log(ImtpLogger.LEVEL_ERROR, "发送数据包时AES出错", e);
-                cancel(selectionKey, "发送数据包时AES出错");
+                imtpLogger.log(ImtpLogger.LEVEL_ERROR, "发送数据包时出错", e);
+                cancel(selectionKey, "发送数据包时出错");
                 return;
             } finally {
                 sendStateHashMap.put(selectionKey, SendState.Leisure);

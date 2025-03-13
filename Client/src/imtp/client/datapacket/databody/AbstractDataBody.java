@@ -1,6 +1,11 @@
 package imtp.client.datapacket.databody;
 
+import imtp.client.process.TransferSchedule;
+
+import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.ShortBufferException;
 import java.io.IOException;
 import java.nio.channels.SocketChannel;
 
@@ -16,7 +21,7 @@ public abstract class AbstractDataBody<T> {
     public abstract boolean baseLinkTransfer();
     public abstract void setContent(T content);
     public abstract T getContent();
-    public abstract void read(Cipher cipher, SocketChannel socketChannel, long size)throws IOException;
-    public abstract void write(Cipher cipher, SocketChannel socketChannel)throws IOException;
+    public abstract void read(Cipher cipher, SocketChannel socketChannel, long size, TransferSchedule transferSchedule) throws IOException, ShortBufferException, IllegalBlockSizeException, BadPaddingException;
+    public abstract void write(Cipher cipher, SocketChannel socketChannel, TransferSchedule transferSchedule) throws IOException, ShortBufferException, IllegalBlockSizeException, BadPaddingException;
     public abstract AbstractDataBody<T> createNewInstance();
 }

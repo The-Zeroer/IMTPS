@@ -61,7 +61,7 @@ public class Secure {
      * 生成加密密码
      *
      * @param secretKey 密钥
-     * @param ivParameterSpec iv 参数规格
+     * @param iv 参数规格
      * @return {@link Cipher }
      */
     public static Cipher generateEncryptCipher(SecretKey secretKey, byte[] iv) throws NoSuchPaddingException, NoSuchAlgorithmException, InvalidAlgorithmParameterException, InvalidKeyException {
@@ -74,12 +74,27 @@ public class Secure {
      * 生成解密密码
      *
      * @param secretKey 密钥
-     * @param ivParameterSpec iv 参数规格
+     * @param iv 参数规格
      * @return {@link Cipher }
      */
     public static Cipher generateDecryptCipher(SecretKey secretKey, byte[] iv) throws NoSuchPaddingException, NoSuchAlgorithmException, InvalidAlgorithmParameterException, InvalidKeyException {
         Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
         cipher.init(Cipher.DECRYPT_MODE, secretKey, new IvParameterSpec(iv));
         return cipher;
+    }
+
+    public static int getBefitSize(int size) {
+        if (size <= 0) {
+            return 0;
+        } else {
+            return size + (16 - size % 16);
+        }
+    }
+    public static long getBefitSize(long size) {
+        if (size <= 0) {
+            return 0;
+        } else {
+            return size + (16 - size % 16);
+        }
     }
 }

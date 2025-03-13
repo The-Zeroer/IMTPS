@@ -18,6 +18,7 @@ import imtp.server.log.LogHandler;
 import imtp.server.process.ImtpHandler;
 import imtp.server.process.ImtpTask;
 import imtp.server.process.ProcessingHub;
+import imtp.server.process.TransferSchedule;
 import imtp.server.security.Secure;
 import imtp.server.util.AddressManager;
 import imtp.server.util.NetFilter;
@@ -279,6 +280,12 @@ public class IMTPS_Server {
     public void removeTask(String taskId) {
         processingHub.removeTask(taskId);
     }
+    public void submitSendTransferSchedule(String taskId, TransferSchedule transferSchedule) {
+        processingHub.submitSendTransferSchedule(taskId, transferSchedule);
+    }
+    public void submitReceiveTransferSchedule(String taskId, TransferSchedule transferSchedule) {
+        processingHub.submitReceiveTransferSchedule(taskId, transferSchedule);
+    }
     public void addHandler(int way, ImtpHandler handler) {
         processingHub.addHandler(way, Type.DEFAULT, Extra.DEFAULT, handler);
     }
@@ -320,6 +327,9 @@ public class IMTPS_Server {
         if (dataPacket.baseLinkTransfer() && dataPacket.getDataBodySize() <= 1024*1024) {
             SelectionKey baseSelectionKey = linkTable.getBaseSelectionKey(UID);
             if (baseSelectionKey != null) {
+                for (int i = 0; baseSelectionKey.attachment() == null && i < 100; i++) {
+                    Tool.sleep();
+                }
                 baseLinkManager.putDataPacket(baseSelectionKey, dataPacket);
             } else {
                 imtpLogger.log(ImtpLogger.LEVEL_WARN, "发送数据包时，目标UID [$] 不存在", UID);

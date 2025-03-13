@@ -4,6 +4,8 @@ import imtp.server.datapacket.code.Extra;
 import imtp.server.datapacket.code.Type;
 import imtp.server.datapacket.code.Way;
 import imtp.server.datapacket.databody.AbstractDataBody;
+import imtp.server.process.ProcessingHub;
+import imtp.server.process.TransferSchedule;
 import imtp.server.security.Secure;
 import imtp.server.util.Tool;
 
@@ -17,6 +19,7 @@ import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.text.SimpleDateFormat;
+import java.util.Arrays;
 
 /**
  * 数据包
@@ -64,7 +67,7 @@ public class DataPacket{
         init(way, type, extra, dataBody);
     }
 
-    public boolean read(SelectionKey selectionKey) throws IOException, InvalidAlgorithmParameterException, NoSuchPaddingException, NoSuchAlgorithmException, InvalidKeyException, ShortBufferException, IllegalBlockSizeException, BadPaddingException {
+    public boolean read(SelectionKey selectionKey, ProcessingHub processingHub) throws IOException, InvalidAlgorithmParameterException, NoSuchPaddingException, NoSuchAlgorithmException, InvalidKeyException, ShortBufferException, IllegalBlockSizeException, BadPaddingException {
         SecretKey aesKey = (SecretKey) selectionKey.attachment();
         SocketChannel socketChannel = (SocketChannel) selectionKey.channel();
         if (aesKey == null) {
@@ -77,7 +80,7 @@ public class DataPacket{
             readHeader(buffer);
             dataBody = DataBodyManager.getDataBody(dataBodyClassId);
             if (dataBody != null) {
-                dataBody.read(null, socketChannel, dataBodySize);
+                dataBody.read(null, socketChannel, dataBodySize, processingHub.getReceiveTransferSchedule(getTaskId()));
             }
         } else {
             ByteBuffer netBuffer = ByteBuffer.allocate(AES_HEADER_SIZE);
@@ -94,12 +97,12 @@ public class DataPacket{
             readHeader(appBuffer);
             dataBody = DataBodyManager.getDataBody(dataBodyClassId);
             if (dataBody != null) {
-                dataBody.read(cipher, socketChannel, dataBodySize);
+                dataBody.read(cipher, socketChannel, dataBodySize, processingHub.getReceiveTransferSchedule(getTaskId()));
             }
         }
         return true;
     }
-    public void write(SelectionKey selectionKey) throws IOException, InvalidAlgorithmParameterException, NoSuchPaddingException, NoSuchAlgorithmException, InvalidKeyException, ShortBufferException, IllegalBlockSizeException, BadPaddingException {
+    public void write(SelectionKey selectionKey, TransferSchedule transferSchedule) throws IOException, InvalidAlgorithmParameterException, NoSuchPaddingException, NoSuchAlgorithmException, InvalidKeyException, ShortBufferException, IllegalBlockSizeException, BadPaddingException {
         if (taskIdBytes == null) {
             taskIdBytes = Tool.produceTaskId().getBytes(StandardCharsets.UTF_8);
         }
@@ -112,13 +115,13 @@ public class DataPacket{
                 socketChannel.write(buffer);
             }
             if (dataBody != null) {
-                dataBody.write(null, socketChannel);
+                dataBody.write(null, socketChannel, transferSchedule);
             }
         } else {
             byte[] iv = Secure.generateIv();
             Cipher cipher = Secure.generateEncryptCipher(aesKey, iv);
             ByteBuffer netBuffer = ByteBuffer.allocate(AES_HEADER_SIZE);
-            ByteBuffer appBuffer = ByteBuffer.allocate(AES_HEADER_SIZE - 16);
+            ByteBuffer appBuffer = ByteBuffer.allocate(DEF_HEADER_SIZE);
             appBuffer.putInt(way).putInt(type).putInt(extra).putLong(time).putLong(dataBodySize).putLong(dataBodyClassId).put(taskIdBytes).flip();
             cipher.doFinal(appBuffer, netBuffer.put(iv));
             netBuffer.flip();
@@ -126,7 +129,7 @@ public class DataPacket{
                 socketChannel.write(netBuffer);
             }
             if (dataBody != null) {
-                dataBody.write(cipher, socketChannel);
+                dataBody.write(cipher, socketChannel, transferSchedule);
             }
         }
     }

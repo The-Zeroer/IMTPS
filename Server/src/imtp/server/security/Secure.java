@@ -82,4 +82,19 @@ public class Secure {
         cipher.init(Cipher.DECRYPT_MODE, secretKey, new IvParameterSpec(iv));
         return cipher;
     }
+
+    public static int getBefitSize(int size) {
+        if (size <= 0) {
+            return 0;
+        } else {
+            return size + (16 - size % 16);
+        }
+    }
+    public static long getBefitSize(long size) {
+        if (size <= 0) {
+            return 0;
+        } else {
+            return size + (16 - size % 16);
+        }
+    }
 }

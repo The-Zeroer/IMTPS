@@ -17,6 +17,8 @@ public class ProcessingHub {
     private final IMTPS_Client imtpClient;
     private final ConcurrentHashMap<String, ImtpTask> taskHashMap;
     private final ConcurrentHashMap<String, ImtpHandler> handlerHashMap;
+    private final ConcurrentHashMap<String, TransferSchedule> sendScheduleHashMap;
+    private final ConcurrentHashMap<String, TransferSchedule> receiveScheduleHashMap;
     private ExecutorService threadPool;
 
     private final ImtpLogger imtpLogger;
@@ -24,6 +26,8 @@ public class ProcessingHub {
     public ProcessingHub(IMTPS_Client imtpClient, ImtpLogger imtpLogger) {
         taskHashMap = new ConcurrentHashMap<>();
         handlerHashMap = new ConcurrentHashMap<>();
+        sendScheduleHashMap = new ConcurrentHashMap<>();
+        receiveScheduleHashMap = new ConcurrentHashMap<>();
         this.imtpClient = imtpClient;
         this.imtpLogger = imtpLogger;
 
@@ -52,6 +56,18 @@ public class ProcessingHub {
     }
     public void removeHandler(int way, int type, int extra) {
         handlerHashMap.remove(way + "-" + type + "-" + extra);
+    }
+    public void submitSendTransferSchedule(String taskId, TransferSchedule transferSchedule) {
+        sendScheduleHashMap.put(taskId, transferSchedule);
+    }
+    public void submitReceiveTransferSchedule(String taskId, TransferSchedule transferSchedule) {
+        receiveScheduleHashMap.put(taskId, transferSchedule);
+    }
+    public TransferSchedule getSendTransferSchedule(String taskId) {
+        return sendScheduleHashMap.remove(taskId);
+    }
+    public TransferSchedule getReceiveTransferSchedule(String taskId) {
+        return receiveScheduleHashMap.remove(taskId);
     }
 
     public void work(DataPacket dataPacket) {

@@ -5,6 +5,7 @@ import imtp.server.datapacket.databody.AbstractDataBody;
 import imtp.server.log.ImtpLogger;
 import imtp.server.process.ProcessingHub;
 import imtp.server.security.Secure;
+import imtp.server.util.Tool;
 
 import java.io.IOException;
 import java.net.SocketAddress;
@@ -47,6 +48,9 @@ public class FileLinkManager extends LinkManager {
                 }
                 String UID = linkTable.bindFileSelectionKey(baseSelectionKey, selectionKey);
                 imtpLogger.log(ImtpLogger.LEVEL_DEBUG, "连接(File) [$] Token验证通过, 并绑定UID [$]", socketAddress, UID);
+                for (int i = 0; selectionKey.attachment() == null && i < 100; i++) {
+                    Tool.sleep();
+                }
                 for (DataPacket cacheDataPacket : linkTable.getCacheDataPacketQueue(UID)) {
                     putDataPacket(selectionKey, cacheDataPacket);
                 }

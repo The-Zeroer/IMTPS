@@ -1,18 +1,26 @@
 package imtp.client.datapacket.databody;
 
+import imtp.client.process.TransferSchedule;
+import imtp.client.security.Secure;
 import imtp.client.util.Tool;
 
+import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.ShortBufferException;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.SocketChannel;
 import java.security.NoSuchAlgorithmException;
 import java.util.UUID;
 
 public class FileDataBody extends AbstractDataBody<File> {
+    private static final int BUFFER_MAX_SIZE = 512*1024;
+
     private static String fileCachePath;
     private long fileSize;
     private File file;
@@ -72,12 +80,49 @@ public class FileDataBody extends AbstractDataBody<File> {
     }
 
     @Override
-    public void read(Cipher cipher, SocketChannel socketChannel, long size) throws IOException {
+    public void read(Cipher cipher, SocketChannel socketChannel, long size, TransferSchedule transferSchedule) throws IOException, ShortBufferException, IllegalBlockSizeException, BadPaddingException {
+        fileSize = size;
         file = new File(getTempFileName(socketChannel));
-        try (RandomAccessFile raf = new RandomAccessFile(file, "w"); FileChannel fileChannel = raf.getChannel()) {
-            fileSize = size;
-            for (long residue = fileSize, readCount = 0; residue > 0; residue -= readCount) {
-                readCount = fileChannel.transferFrom(socketChannel, fileSize - residue, residue);
+        try (RandomAccessFile raf = new RandomAccessFile(file, "rw"); FileChannel fileChannel = raf.getChannel()) {
+            if (cipher == null) {
+                for (long residue = fileSize, readSize; residue > 0; residue -= readSize) {
+                    readSize = fileChannel.transferFrom(socketChannel, fileSize - residue, residue);
+                }
+            } else {
+                long sumSize = fileSize < BUFFER_MAX_SIZE ? Secure.getBefitSize(fileSize) :
+                        (fileSize / BUFFER_MAX_SIZE) * Secure.getBefitSize(BUFFER_MAX_SIZE) + Secure.getBefitSize(fileSize % BUFFER_MAX_SIZE);
+                int befitSize = Secure.getBefitSize(fileSize > BUFFER_MAX_SIZE ? BUFFER_MAX_SIZE : (int) fileSize);
+                ByteBuffer appBuffer = ByteBuffer.allocate(befitSize);
+                ByteBuffer netBuffer = ByteBuffer.allocate(befitSize);
+                if (transferSchedule == null) {
+                    for (long residue = sumSize, readSize = 0; residue > 0; residue -= readSize, readSize = 0) {
+                        if (residue < netBuffer.remaining()) {
+                            netBuffer.limit((int) residue);
+                        }
+                        while (netBuffer.hasRemaining()) {
+                            readSize += socketChannel.read(netBuffer);
+                        }
+                        cipher.doFinal(netBuffer.flip(), appBuffer.clear());
+                        netBuffer.clear();
+                        fileChannel.write(appBuffer.flip());
+                    }
+                } else {
+                    transferSchedule.setMessage("正在接收" + file.getName());
+                    transferSchedule.setSumSize(sumSize);
+                    for (long residue = sumSize, readSize = 0; residue > 0; residue -= readSize, readSize = 0) {
+                        if (residue < netBuffer.remaining()) {
+                            netBuffer.limit((int) residue);
+                        }
+                        while (netBuffer.hasRemaining()) {
+                            readSize += socketChannel.read(netBuffer);
+                        }
+                        cipher.doFinal(netBuffer.flip(), appBuffer.clear());
+                        netBuffer.clear();
+                        fileChannel.write(appBuffer.flip());
+                        transferSchedule.updateProgress(readSize);
+                    }
+                    transferSchedule.transferFinish("接收完成" + file.getName());
+                }
             }
         } catch (IOException e) {
             file.delete();
@@ -85,13 +130,42 @@ public class FileDataBody extends AbstractDataBody<File> {
         }
     }
     @Override
-    public void write(Cipher cipher, SocketChannel socketChannel) throws IOException {
+    public void write(Cipher cipher, SocketChannel socketChannel, TransferSchedule transferSchedule) throws IOException, ShortBufferException, IllegalBlockSizeException, BadPaddingException {
         if (file == null || !file.exists()) {
             return;
         }
         try (RandomAccessFile raf = new RandomAccessFile(file, "r"); FileChannel fileChannel = raf.getChannel()) {
-            for (long residue = fileSize, writeCount = 0; residue > 0; residue -= writeCount) {
-                writeCount = fileChannel.transferTo(fileSize - residue, residue, socketChannel);
+            if (cipher == null) {
+                for (long residue = fileSize, writeCount; residue > 0; residue -= writeCount) {
+                    writeCount = fileChannel.transferTo(fileSize - residue, residue, socketChannel);
+                }
+            } else {
+                int bufferSize = fileSize > BUFFER_MAX_SIZE ? BUFFER_MAX_SIZE : (int) fileSize;
+                ByteBuffer appBuffer = ByteBuffer.allocate(bufferSize);
+                ByteBuffer netBuffer = ByteBuffer.allocate(Secure.getBefitSize(bufferSize));
+                if (transferSchedule == null) {
+                    for (long residue = fileSize, putSize; residue > 0; residue -= putSize) {
+                        putSize = fileChannel.read(appBuffer.clear());
+                        cipher.doFinal(appBuffer.flip(), netBuffer.clear());
+                        netBuffer.flip();
+                        while (netBuffer.hasRemaining()) {
+                            socketChannel.write(netBuffer);
+                        }
+                    }
+                } else {
+                    transferSchedule.setMessage("正在发送" + file.getName());
+                    transferSchedule.setSumSize(fileSize);
+                    for (long residue = fileSize, putSize; residue > 0; residue -= putSize) {
+                        putSize = fileChannel.read(appBuffer.clear());
+                        cipher.doFinal(appBuffer.flip(), netBuffer.clear());
+                        netBuffer.flip();
+                        while (netBuffer.hasRemaining()) {
+                            socketChannel.write(netBuffer);
+                        }
+                        transferSchedule.updateProgress(putSize);
+                    }
+                    transferSchedule.transferFinish("发送完成" + file.getName());
+                }
             }
         }
     }

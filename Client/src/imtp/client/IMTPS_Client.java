@@ -16,6 +16,7 @@ import imtp.client.log.ImtpLogger;
 import imtp.client.process.ImtpHandler;
 import imtp.client.process.ImtpTask;
 import imtp.client.process.ProcessingHub;
+import imtp.client.process.TransferSchedule;
 import imtp.client.security.Secure;
 import imtp.client.util.Tool;
 
@@ -174,6 +175,12 @@ public class IMTPS_Client {
      */
     public void removeTask(String taskId) {
         processingHub.removeTask(taskId);
+    }
+    public void submitSendTransferSchedule(String taskId, TransferSchedule transferSchedule) {
+        processingHub.submitSendTransferSchedule(taskId, transferSchedule);
+    }
+    public void submitReceiveTransferSchedule(String taskId, TransferSchedule transferSchedule) {
+        processingHub.submitReceiveTransferSchedule(taskId, transferSchedule);
     }
     public void addHandler(int way, ImtpHandler handler) {
         processingHub.addHandler(way, Type.DEFAULT, Extra.DEFAULT, handler);
