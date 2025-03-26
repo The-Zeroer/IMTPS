@@ -241,8 +241,7 @@ public abstract class LinkManager extends Thread {
                     cancel(selectionKey, "客户端主动关闭");
                     return;
                 }
-            } catch (IOException | InvalidAlgorithmParameterException | NoSuchPaddingException | NoSuchAlgorithmException |
-                     InvalidKeyException | ShortBufferException | IllegalBlockSizeException | BadPaddingException e) {
+            } catch (Exception e) {
                 imtpsLogger.log(ImtpsLogger.LEVEL_ERROR, "接收数据包时出错", e);
                 cancel(selectionKey, "接收数据包时出错");
                 return;
@@ -275,8 +274,7 @@ public abstract class LinkManager extends Thread {
         threadPool.submit(() -> {
             try {
                 dataPacket.write(selectionKey, processingHub.getSendTransferSchedule(dataPacket.getTaskId()));
-            } catch (IOException | InvalidAlgorithmParameterException | NoSuchPaddingException | NoSuchAlgorithmException |
-                     InvalidKeyException | ShortBufferException | IllegalBlockSizeException | BadPaddingException e) {
+            } catch (Exception e) {
                 imtpsLogger.log(ImtpsLogger.LEVEL_ERROR, "接发送数据包时出错", e);
                 cancel(selectionKey, "发送数据包时出错");
                 return;

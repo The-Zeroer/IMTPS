@@ -15,22 +15,31 @@ import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.SocketChannel;
-import java.security.NoSuchAlgorithmException;
-import java.util.UUID;
+import java.nio.charset.StandardCharsets;
 
 public class FileDataBody extends AbstractDataBody<File> {
     private static final int BUFFER_MAX_SIZE = 512*1024;
-
     private static String fileCachePath;
+
     private long fileSize;
     private File file;
+    private String srcFileName;
 
     static {
         try {
-            setFileCachePath(".\\ImtpFileCache\\");
+            setFileCachePath(".\\ImtpsFileCache\\");
         } catch (FileNotFoundException e) {
             fileCachePath = ".\\";
             throw new NullPointerException("file is null");
+        }
+    }
+    public static void setFileCachePath(String fileCachePath) throws FileNotFoundException {
+        FileDataBody.fileCachePath = fileCachePath;
+        File tempFile = new File(fileCachePath);
+        if (!tempFile.exists()) {
+            if (!tempFile.mkdir()) {
+                throw new FileNotFoundException(fileCachePath);
+            }
         }
     }
 
@@ -41,25 +50,20 @@ public class FileDataBody extends AbstractDataBody<File> {
         }
         this.file = file;
         fileSize = file.length();
+        srcFileName = file.getName();
     }
 
-    public static void setFileCachePath(String fileCachePath) throws FileNotFoundException {
-        FileDataBody.fileCachePath = fileCachePath;
-        File tempFile = new File(fileCachePath);
-        if (!tempFile.exists()) {
-            if (!tempFile.mkdir()) {
-                throw new FileNotFoundException(fileCachePath);
-            }
-        }
-    }
     public void moveFile(File destFile) throws IOException {
         Tool.moveFile(file, destFile);
         file = destFile;
     }
+    public String getSrcFileName() {
+        return srcFileName;
+    }
 
     @Override
     public long getSize() {
-        return fileSize;
+        return srcFileName == null ? fileSize : fileSize + SecureManager.getBefitSize(srcFileName.getBytes(StandardCharsets.UTF_8).length) + 4;
     }
     @Override
     public boolean baseLinkTransfer() {
@@ -73,6 +77,7 @@ public class FileDataBody extends AbstractDataBody<File> {
         }
         this.file = file;
         fileSize = file.length();
+        srcFileName = file.getName();
     }
     @Override
     public File getContent() {
@@ -81,14 +86,28 @@ public class FileDataBody extends AbstractDataBody<File> {
 
     @Override
     public void read(Cipher cipher, SocketChannel socketChannel, long size, AbstractTransferSchedule abstractTransferSchedule) throws IOException, ShortBufferException, IllegalBlockSizeException, BadPaddingException {
-        fileSize = size;
-        file = new File(getTempFileName(socketChannel));
+        ByteBuffer netBuffer = ByteBuffer.allocate(4);
+        while (netBuffer.hasRemaining()) {
+            socketChannel.read(netBuffer);
+        }
+        int fileNameSize = netBuffer.flip().getInt();
+        int befitSize = SecureManager.getBefitSize(fileNameSize);
+        netBuffer = ByteBuffer.allocate(befitSize);
+        while (netBuffer.hasRemaining()) {
+            socketChannel.read(netBuffer);
+        }
+        ByteBuffer appBuffer = ByteBuffer.allocate(befitSize);
+        cipher.doFinal(netBuffer.flip(), appBuffer);
+        srcFileName = new String(appBuffer.array(), 0, fileNameSize, StandardCharsets.UTF_8);
+        fileSize = size - (befitSize + 4);
+        file = createTempFile();
+
         try (RandomAccessFile raf = new RandomAccessFile(file, "rw"); FileChannel fileChannel = raf.getChannel()) {
             long sumSize = fileSize < BUFFER_MAX_SIZE ? SecureManager.getBefitSize(fileSize) :
                     (fileSize / BUFFER_MAX_SIZE) * SecureManager.getBefitSize(BUFFER_MAX_SIZE) + SecureManager.getBefitSize(fileSize % BUFFER_MAX_SIZE);
-            int befitSize = SecureManager.getBefitSize(fileSize > BUFFER_MAX_SIZE ? BUFFER_MAX_SIZE : (int) fileSize);
-            ByteBuffer appBuffer = ByteBuffer.allocate(befitSize);
-            ByteBuffer netBuffer = ByteBuffer.allocate(befitSize);
+            befitSize = SecureManager.getBefitSize(fileSize > BUFFER_MAX_SIZE ? BUFFER_MAX_SIZE : (int) fileSize);
+            appBuffer = ByteBuffer.allocate(befitSize);
+            netBuffer = ByteBuffer.allocate(befitSize);
             if (abstractTransferSchedule == null) {
                 for (long residue = sumSize, readSize = 0; residue > 0; residue -= readSize, readSize = 0) {
                     if (residue < netBuffer.remaining()) {
@@ -129,9 +148,19 @@ public class FileDataBody extends AbstractDataBody<File> {
             return;
         }
         try (RandomAccessFile raf = new RandomAccessFile(file, "r"); FileChannel fileChannel = raf.getChannel()) {
+            byte[] fileNameBytes = srcFileName.getBytes(StandardCharsets.UTF_8);
+            int befitSize = SecureManager.getBefitSize(fileNameBytes.length);
+            ByteBuffer netBuffer = ByteBuffer.allocate(4 + befitSize);
+            ByteBuffer appBuffer = ByteBuffer.allocate(befitSize);
+            cipher.doFinal(appBuffer.put(fileNameBytes).flip(), netBuffer.putInt(fileNameBytes.length));
+            netBuffer.flip();
+            while (netBuffer.hasRemaining()) {
+                socketChannel.write(netBuffer);
+            }
+
             int bufferSize = fileSize > BUFFER_MAX_SIZE ? BUFFER_MAX_SIZE : (int) fileSize;
-            ByteBuffer appBuffer = ByteBuffer.allocate(bufferSize);
-            ByteBuffer netBuffer = ByteBuffer.allocate(SecureManager.getBefitSize(bufferSize));
+            appBuffer = ByteBuffer.allocate(bufferSize);
+            netBuffer = ByteBuffer.allocate(SecureManager.getBefitSize(bufferSize));
             if (abstractTransferSchedule == null) {
                 for (long residue = fileSize, putSize; residue > 0; residue -= putSize) {
                     putSize = fileChannel.read(appBuffer.clear());
@@ -162,11 +191,20 @@ public class FileDataBody extends AbstractDataBody<File> {
         return new FileDataBody();
     }
 
-    private synchronized String getTempFileName(SocketChannel socketChannel) {
-        try {
-            return fileCachePath + Tool.getHashValue((String.valueOf(System.currentTimeMillis()) + UUID.randomUUID() + socketChannel).getBytes(), "MD5");
-        } catch (NoSuchAlgorithmException e) {
-            return fileCachePath + System.currentTimeMillis() + UUID.randomUUID();
+    private File createTempFile() {
+        String baseName, extension = "";
+        int dotIndex = srcFileName.lastIndexOf(".");
+        if (dotIndex != -1) {
+            baseName = srcFileName.substring(0, dotIndex);
+            extension = srcFileName.substring(dotIndex);
+        } else {
+            baseName = srcFileName;
         }
+
+        File file = new File(fileCachePath, System.currentTimeMillis() + "-" + srcFileName);
+        for (int counter = 1; file.exists(); counter++) {
+            file = new File(fileCachePath, System.currentTimeMillis() + "-" + baseName + "(" + counter + ")" + extension);
+        }
+        return file;
     }
 }
