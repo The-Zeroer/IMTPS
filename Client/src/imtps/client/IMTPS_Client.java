@@ -10,14 +10,15 @@ import imtps.client.datapacket.databody.AbstractDataBody;
 import imtps.client.datapacket.databody.ByteDataBody;
 import imtps.client.datapacket.databody.FileDataBody;
 import imtps.client.datapacket.databody.TextDataBody;
+import imtps.client.event.ImtpsEventCatch;
 import imtps.client.link.LinkManager;
 import imtps.client.link.LinkTable;
-import imtps.client.log.LogHandler;
 import imtps.client.log.ImtpsLogger;
+import imtps.client.log.LogHandler;
+import imtps.client.process.AbstractTransferSchedule;
 import imtps.client.process.ImtpsHandler;
 import imtps.client.process.ImtpsTask;
 import imtps.client.process.ProcessingHub;
-import imtps.client.process.AbstractTransferSchedule;
 import imtps.client.security.SecureManager;
 import imtps.client.util.Tool;
 
@@ -51,6 +52,7 @@ public class IMTPS_Client {
         linkTable = new LinkTable();
         processingHub = new ProcessingHub(this, imtpsLogger);
         linkManager = new LinkManager(secureManager, linkTable, processingHub, imtpsLogger);
+        linkManager.setImtpsEventCatch(new ImtpsEventCatch() {});
         DataBodyManager.addDataBody(new ByteDataBody());
         DataBodyManager.addDataBody(new TextDataBody());
         DataBodyManager.addDataBody(new FileDataBody());
@@ -67,6 +69,15 @@ public class IMTPS_Client {
         SocketChannel socketChannel = SocketChannel.open(new InetSocketAddress(host, port));
         imtpsLogger.log(ImtpsLogger.LEVEL_INFO, "已连接至服务器");
         HandShake.execute(socketChannel, secureManager, linkManager, imtpsLogger, "baseLink");
+    }
+
+    /**
+     * 获取链接标志
+     *
+     * @return boolean 已建立连接-true，未建立连接-false
+     */
+    public boolean getLinkFlag() {
+        return linkTable.getBaseSelectionKey() instanceof SelectionKey selectionKey && selectionKey.isValid();
     }
 
     /**
@@ -92,7 +103,7 @@ public class IMTPS_Client {
     }
 
     /**
-     * 设置 LinkManager 线程池
+     * 设置 连接管理器 线程池
      *
      * @param threadPool 线程池
      */
@@ -101,6 +112,11 @@ public class IMTPS_Client {
             linkManager.setThreadPool(threadPool);
         }
     }
+    /**
+     * 设置处理中心线程池
+     *
+     * @param threadPool 线程池
+     */
     public void setProcessingHubThreadPool(ExecutorService threadPool) {
         if (threadPool != null) {
             processingHub.setThreadPool(threadPool);
@@ -114,6 +130,16 @@ public class IMTPS_Client {
     public void setLinkManagerHeartBeatInterval(int interval) {
         if (interval > 0) {
             linkManager.setHeartBeatInterval(interval);
+        }
+    }
+    /**
+     * 设置 IMTPS 事件捕获
+     *
+     * @param imtpsEventCatch IMTPS 事件捕获
+     */
+    public void setImtpsEventCatch(ImtpsEventCatch imtpsEventCatch) {
+        if (imtpsEventCatch != null) {
+            linkManager.setImtpsEventCatch(imtpsEventCatch);
         }
     }
 
@@ -179,31 +205,89 @@ public class IMTPS_Client {
     public void removeTask(String taskId) {
         processingHub.removeTask(taskId);
     }
+
+    /**
+     * 提交 发送 传输时间表
+     *
+     * @param taskId 任务 ID
+     * @param abstractTransferSchedule 摘要 传输时间表 {@link AbstractTransferSchedule}
+     */
     public void submitSendTransferSchedule(String taskId, AbstractTransferSchedule abstractTransferSchedule) {
         processingHub.submitSendTransferSchedule(taskId, abstractTransferSchedule);
     }
+    /**
+     * 提交 接收 传输时间表
+     *
+     * @param taskId 任务 ID
+     * @param abstractTransferSchedule 摘要 传输时间表 {@link AbstractTransferSchedule}
+     */
     public void submitReceiveTransferSchedule(String taskId, AbstractTransferSchedule abstractTransferSchedule) {
         processingHub.submitReceiveTransferSchedule(taskId, abstractTransferSchedule);
     }
+
+    /**
+     * 添加处理程序
+     *
+     * @param way 方法
+     * @param handler 处理器
+     */
     public void addHandler(int way, ImtpsHandler handler) {
         processingHub.addHandler(way, Type.DEFAULT, Extra.DEFAULT, handler);
     }
+    /**
+     * 添加处理程序
+     *
+     * @param way 方法
+     * @param type 类型
+     * @param handler 处理器
+     */
     public void addHandler(int way, int type, ImtpsHandler handler) {
         processingHub.addHandler(way, type, Extra.DEFAULT, handler);
     }
+    /**
+     * 添加处理程序
+     *
+     * @param way 方法
+     * @param type 类型
+     * @param extra 额外
+     * @param handler 处理器
+     */
     public void addHandler(int way, int type, int extra, ImtpsHandler handler) {
         processingHub.addHandler(way, type, extra, handler);
     }
+    /**
+     * 移除处理程序
+     *
+     * @param way 方法
+     */
     public void removeHandler(int way) {
         processingHub.removeHandler(way, Type.DEFAULT, Extra.DEFAULT);
     }
+    /**
+     * 移除处理程序
+     *
+     * @param way 方法
+     * @param type 类型
+     */
     public void removeHandler(int way, int type) {
         processingHub.removeHandler(way, type, Extra.DEFAULT);
     }
+    /**
+     * 移除处理程序
+     *
+     * @param way 方法
+     * @param type 类型
+     * @param extra 额外
+     */
     public void removeHandler(int way, int type, int extra) {
         processingHub.removeHandler(way, type, extra);
     }
 
+    /**
+     * 放入数据包，主动发送数据包
+     *
+     * @param dataPacket 数据包
+     */
     public void putDataPacket(DataPacket dataPacket) {
         if (dataPacket == null) {
             imtpsLogger.log(ImtpsLogger.LEVEL_ERROR, "dataPacket为null");
@@ -234,6 +318,11 @@ public class IMTPS_Client {
             }
         }
     }
+    /**
+     * 放入数据包，主动发送数据包
+     *
+     * @param dataPacket 数据包
+     */
     public void putDataPacket(SelectionKey selectionKey, DataPacket dataPacket) {
         linkManager.putDataPacket(selectionKey, dataPacket);
     }

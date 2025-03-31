@@ -1,5 +1,6 @@
 package imtps.server;
 
+import imtps.server.accept.Listeners;
 import imtps.server.datapacket.DataBodyManager;
 import imtps.server.datapacket.DataPacket;
 import imtps.server.datapacket.code.Extra;
@@ -12,13 +13,12 @@ import imtps.server.datapacket.databody.TextDataBody;
 import imtps.server.link.BaseLinkManager;
 import imtps.server.link.FileLinkManager;
 import imtps.server.link.LinkTable;
-import imtps.server.accept.Listeners;
 import imtps.server.log.ImtpsLogger;
 import imtps.server.log.LogHandler;
+import imtps.server.process.AbstractTransferSchedule;
 import imtps.server.process.ImtpsHandler;
 import imtps.server.process.ImtpsTask;
 import imtps.server.process.ProcessingHub;
-import imtps.server.process.AbstractTransferSchedule;
 import imtps.server.security.SecureManager;
 import imtps.server.util.AddressManager;
 import imtps.server.util.NetFilter;
@@ -142,16 +142,31 @@ public class IMTPS_Server {
         imtpsLogger.log(ImtpsLogger.LEVEL_INFO, "IMTP_Server停止运行");
     }
 
+    /**
+     * 设置 基础连接管理器 线程池
+     *
+     * @param threadPool 线程池
+     */
     public void setBaseLinkManagerThreadPool(ExecutorService threadPool) {
         if (threadPool != null) {
             baseLinkManager.setThreadPool(threadPool);
         }
     }
+    /**
+     * 设置 文件连接管理器 线程池
+     *
+     * @param threadPool 线程池
+     */
     public void setFileLinkManagerThreadPool(ExecutorService threadPool) {
         if (threadPool != null) {
             fileLinkManager.setThreadPool(threadPool);
         }
     }
+    /**
+     * 设置处理中心线程池
+     *
+     * @param threadPool 线程池
+     */
     public void setProcessingHubThreadPool(ExecutorService threadPool) {
         if (threadPool != null) {
             processingHub.setThreadPool(threadPool);
@@ -280,27 +295,80 @@ public class IMTPS_Server {
     public void removeTask(String taskId) {
         processingHub.removeTask(taskId);
     }
+
+    /**
+     * 提交 发送 传输时间表
+     *
+     * @param taskId 任务 ID
+     * @param abstractTransferSchedule 摘要 传输时间表 {@link AbstractTransferSchedule}
+     */
     public void submitSendTransferSchedule(String taskId, AbstractTransferSchedule abstractTransferSchedule) {
         processingHub.submitSendTransferSchedule(taskId, abstractTransferSchedule);
     }
+    /**
+     * 提交 接收 传输时间表
+     *
+     * @param taskId 任务 ID
+     * @param abstractTransferSchedule 摘要 传输时间表 {@link AbstractTransferSchedule}
+     */
     public void submitReceiveTransferSchedule(String taskId, AbstractTransferSchedule abstractTransferSchedule) {
         processingHub.submitReceiveTransferSchedule(taskId, abstractTransferSchedule);
     }
+
+    /**
+     * 添加处理程序
+     *
+     * @param way 方法
+     * @param handler 处理器
+     */
     public void addHandler(int way, ImtpsHandler handler) {
         processingHub.addHandler(way, Type.DEFAULT, Extra.DEFAULT, handler);
     }
+    /**
+     * 添加处理程序
+     *
+     * @param way 方法
+     * @param type 类型
+     * @param handler 处理器
+     */
     public void addHandler(int way, int type, ImtpsHandler handler) {
         processingHub.addHandler(way, type, Extra.DEFAULT, handler);
     }
+    /**
+     * 添加处理程序
+     *
+     * @param way 方法
+     * @param type 类型
+     * @param extra 额外
+     * @param handler 处理器
+     */
     public void addHandler(int way, int type, int extra, ImtpsHandler handler) {
         processingHub.addHandler(way, type, extra, handler);
     }
+    /**
+     * 移除处理程序
+     *
+     * @param way 方法
+     */
     public void removeHandler(int way) {
         processingHub.removeHandler(way, Type.DEFAULT, Extra.DEFAULT);
     }
+    /**
+     * 移除处理程序
+     *
+     * @param way 方法
+     * @param type 类型
+     */
     public void removeHandler(int way, int type) {
         processingHub.removeHandler(way, type, Extra.DEFAULT);
     }
+    /**
+     * 移除处理程序
+     *
+     * @param way 方法
+     * @param type 类型
+     * @param extra 额外
+     */
     public void removeHandler(int way, int type, int extra) {
         processingHub.removeHandler(way, type, extra);
     }
@@ -328,21 +396,26 @@ public class IMTPS_Server {
      * @param UID uid
      * @param reason 原因
      */
-    public void cancel(String UID, String... reason) {
+    public void cancel(String UID, boolean wait, String... reason) {
         if (reason == null) {
-            baseLinkManager.cancel(linkTable.getBaseSelectionKey(UID), "服务端主动关闭");
+            baseLinkManager.cancel(linkTable.getBaseSelectionKey(UID), wait, "服务端主动关闭");
         } else {
-            baseLinkManager.cancel(linkTable.getBaseSelectionKey(UID), reason[0]);
+            baseLinkManager.cancel(linkTable.getBaseSelectionKey(UID), wait, reason[0]);
         }
     }
-    public void cancel(SelectionKey selectionKey, String... reason) {
+    public void cancel(SelectionKey selectionKey, boolean wait, String... reason) {
         if (reason == null) {
-            baseLinkManager.cancel(selectionKey, "服务端主动关闭");
+            baseLinkManager.cancel(selectionKey, wait, "服务端主动关闭");
         } else {
-            baseLinkManager.cancel(selectionKey, reason[0]);
+            baseLinkManager.cancel(selectionKey, wait, reason[0]);
         }
     }
 
+    /**
+     * 放入数据包，主动发送数据包
+     *
+     * @param dataPacket 数据包
+     */
     public void putDataPacket(String UID, DataPacket dataPacket) {
         if (UID == null || dataPacket == null) {
             imtpsLogger.log(ImtpsLogger.LEVEL_ERROR, "UID或dataPacket为null");
@@ -387,6 +460,11 @@ public class IMTPS_Server {
             }
         }
     }
+    /**
+     * 放入数据包，主动发送数据包
+     *
+     * @param dataPacket 数据包
+     */
     public void putDataPacket(SelectionKey selectionKey, DataPacket dataPacket) {
         if (dataPacket.baseLinkTransfer() && dataPacket.getDataBodySize() <= 1024*1024) {
             baseLinkManager.putDataPacket(selectionKey, dataPacket);
@@ -395,10 +473,20 @@ public class IMTPS_Server {
         }
     }
 
-    public ConcurrentHashMap<String, String> getTokenVerifyHashMap() {
+    /**
+     * 获取令牌验证哈希映射
+     *
+     * @return {@link ConcurrentHashMap }<{@link String }, {@link LinkTable.TokenSet }>
+     */
+    public ConcurrentHashMap<String, LinkTable.TokenSet> getTokenVerifyHashMap() {
         return linkTable.getTokenVerifyHashMap();
     }
-    public void setTokenVerifyHashMap(ConcurrentHashMap<String, String> tokenVerifyHashMap) {
+    /**
+     * 设置令牌验证哈希映射
+     *
+     * @param tokenVerifyHashMap 令牌验证哈希映射
+     */
+    public void setTokenVerifyHashMap(ConcurrentHashMap<String, LinkTable.TokenSet> tokenVerifyHashMap) {
         if (tokenVerifyHashMap != null) {
             linkTable.setTokenVerifyHashMap(tokenVerifyHashMap);
         }

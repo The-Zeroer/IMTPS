@@ -42,7 +42,6 @@ public class DataPacket{
     private AbstractDataBody<?> dataBody;
 
     private SelectionKey selectionKey;
-    private String UID;
 
     public DataPacket(){
         init(Way.DEFAULT, Type.DEFAULT, Extra.DEFAULT, null);
@@ -140,19 +139,11 @@ public class DataPacket{
     public String getTaskId(){
         return taskIdBytes == null ? "" : new String(taskIdBytes, StandardCharsets.UTF_8);
     }
-    public DataPacket setSelectionKey(SelectionKey selectionKey){
+    public void setSelectionKey(SelectionKey selectionKey){
         this.selectionKey = selectionKey;
-        return this;
     }
     public SelectionKey getSelectionKey(){
         return selectionKey;
-    }
-    public DataPacket setUID(String UID){
-        this.UID = UID;
-        return this;
-    }
-    public String getUID(){
-        return UID;
     }
 
     public String getHeadCode() {
@@ -185,15 +176,8 @@ public class DataPacket{
 
     @Override
     public String toString() {
-        String remoteAddress = "null";
-        if (selectionKey != null) {
-            try {
-                remoteAddress = ((SocketChannel)selectionKey.channel()).getRemoteAddress().toString();
-            } catch (IOException ignored) {}
-        }
         StringBuilder stringBuilder = new StringBuilder();
-        stringBuilder.append("[UID=").append(UID).append("; RemoteAddress=").append(remoteAddress).append("; Way=")
-                .append(way).append("; Type=").append(type).append("; Extra=").append(extra)
+        stringBuilder.append("[Way=").append(way).append("; Type=").append(type).append("; Extra=").append(extra)
                 .append("; Time=").append(dateFormat.format(time)).append("; DataSize=")
                 .append(formatBytes(dataBodySize)).append("; TaskId=").append(getTaskId());
         if (dataBody != null && dataBody.getContent() instanceof String string) {

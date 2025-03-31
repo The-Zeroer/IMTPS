@@ -37,13 +37,13 @@ public class FileLinkManager extends LinkManager {
                 String token = (String) dataBody.getContent();
                 SelectionKey baseSelectionKey = linkTable.getBaseSelectionKey(token);
                 if (baseSelectionKey == null) {
-                    cancel(selectionKey, "Token验证失败");
+                    cancel(selectionKey, false, "Token验证失败");
                     return;
                 }
                 SelectionKey fileSelectionKey = linkTable.getFileSelectionKey(token);
                 if (fileSelectionKey != null) {
                     SocketAddress oldSocketAddress = ((SocketChannel) fileSelectionKey.channel()).getRemoteAddress();
-                    cancel(fileSelectionKey, "FileLink替换");
+                    cancel(fileSelectionKey, false, "FileLink替换");
                     imtpsLogger.log(ImtpsLogger.LEVEL_WARN, "连接(File) [$] 替换为 [$]", oldSocketAddress, socketAddress);
                 }
                 String UID = linkTable.bindFileSelectionKey(baseSelectionKey, selectionKey);

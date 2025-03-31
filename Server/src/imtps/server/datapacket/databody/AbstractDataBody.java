@@ -55,7 +55,8 @@ public abstract class AbstractDataBody<T> {
      * @throws IllegalBlockSizeException 非法区块大小异常
      * @throws BadPaddingException 错误填充异常
      */
-    public abstract void read(Cipher cipher, SocketChannel socketChannel, long size, AbstractTransferSchedule abstractTransferSchedule) throws IOException, ShortBufferException, IllegalBlockSizeException, BadPaddingException;
+    public abstract void read(Cipher cipher, SocketChannel socketChannel, long size, AbstractTransferSchedule abstractTransferSchedule)
+            throws IOException, ShortBufferException, IllegalBlockSizeException, BadPaddingException;
 
     /**
      * 将该数据体数据向socketChannel中写
@@ -68,7 +69,8 @@ public abstract class AbstractDataBody<T> {
      * @throws IllegalBlockSizeException 非法区块大小异常
      * @throws BadPaddingException 错误填充异常
      */
-    public abstract void write(Cipher cipher, SocketChannel socketChannel, AbstractTransferSchedule abstractTransferSchedule) throws IOException, ShortBufferException, IllegalBlockSizeException, BadPaddingException;
+    public abstract void write(Cipher cipher, SocketChannel socketChannel, AbstractTransferSchedule abstractTransferSchedule)
+            throws IOException, ShortBufferException, IllegalBlockSizeException, BadPaddingException;
     /**
      * 创建新实例，请返回此子类的新对象
      *

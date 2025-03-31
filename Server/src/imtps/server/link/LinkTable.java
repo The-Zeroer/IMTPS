@@ -6,6 +6,7 @@ import imtps.server.log.ImtpsLogger;
 import java.io.IOException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
+import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -30,7 +31,7 @@ public class LinkTable {
     private final ConcurrentHashMap<SelectionKey, UIDSet> keyToUIDHashMap;
     private final ConcurrentHashMap<String, Byte> fileLinkStateHashMap;
     private final ConcurrentHashMap<String, ConcurrentLinkedQueue<DataPacket>> cacheDataPacketHashMap;
-    private ConcurrentHashMap<String, String> tokenVerifyHashMap;
+    private ConcurrentHashMap<String, TokenSet> tokenVerifyHashMap;
 
     private final ImtpsLogger imtpsLogger;
 
@@ -74,6 +75,7 @@ public class LinkTable {
                 }
                 fileLinkStateHashMap.remove(uidSet.UID);
                 imtpsLogger.log(ImtpsLogger.LEVEL_INFO, "UID [$] 已注销", uidSet.UID);
+                tokenVerifyHashMap.putIfAbsent(uidSet.token, new TokenSet(uidSet.token, uidSet.UID, System.currentTimeMillis()));
             }
             if (uidSet.token != null) {
                 uidToKeyHashMap.remove(uidSet.token);
@@ -157,21 +159,27 @@ public class LinkTable {
         cacheDataPacketHashMap.remove(UID);
     }
 
-    public ConcurrentHashMap<String, String> getTokenVerifyHashMap() {
-        ConcurrentHashMap<String, String> tokenVerifyHashMap = new ConcurrentHashMap<>();
+    public ConcurrentHashMap<String, TokenSet> getTokenVerifyHashMap() {
         for (UIDSet uidSet : keyToUIDHashMap.values()) {
-            tokenVerifyHashMap.putIfAbsent(uidSet.token, uidSet.UID);
+            tokenVerifyHashMap.putIfAbsent(uidSet.token, new TokenSet(uidSet.token, uidSet.UID, System.currentTimeMillis()));
         }
         return tokenVerifyHashMap;
     }
-    public void setTokenVerifyHashMap(ConcurrentHashMap<String, String> tokenVerifyHashMap) {
+    public void setTokenVerifyHashMap(ConcurrentHashMap<String, TokenSet> tokenVerifyHashMap) {
+        for (Map.Entry<String, TokenSet> entry : tokenVerifyHashMap.entrySet()) {
+            if (System.currentTimeMillis() - entry.getValue().time > 1000 * 60 * 60 * 3) {
+                tokenVerifyHashMap.remove(entry.getKey());
+            }
+        }
         this.tokenVerifyHashMap = tokenVerifyHashMap;
     }
-    public boolean addVerifyToken(String token, String UID) {
-        return tokenVerifyHashMap.putIfAbsent(token, UID) != null;
-    }
     public String verifyToken(String token) {
-        return tokenVerifyHashMap.remove(token);
+        TokenSet tokenSet = tokenVerifyHashMap.remove(token);
+        if (tokenSet != null && System.currentTimeMillis() - tokenSet.time < 1000 * 60 * 3) {
+            return tokenSet.UID;
+        } else {
+            return null;
+        }
     }
 
     static class KeySet {
@@ -179,5 +187,14 @@ public class LinkTable {
     }
     static class UIDSet {
         public String UID, token;
+    }
+    public static class TokenSet {
+        public String token, UID;
+        public long time;
+        public TokenSet(String token, String UID, long time) {
+            this.token = token;
+            this.UID = UID;
+            this.time = time;
+        }
     }
 }

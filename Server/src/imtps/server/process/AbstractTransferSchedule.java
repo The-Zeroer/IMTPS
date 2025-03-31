@@ -8,9 +8,29 @@ package imtps.server.process;
  * @version 1.0.0
  */
 public abstract class AbstractTransferSchedule {
+    /**
+     * 设置消息
+     *
+     * @param message 消息
+     */
     public abstract void setMessage(String message);
+    /**
+     * 设置总大小
+     *
+     * @param sumSize 总共需要传输的字节数
+     */
     public abstract void setSumSize(long sumSize);
+    /**
+     * 更新进度
+     *
+     * @param progress 本次传输的字节数
+     */
     public abstract void updateProgress(long progress);
+    /**
+     * 传输结束
+     *
+     * @param message 消息
+     */
     public abstract void transferFinish(String message);
 
     protected static String formatBytes(long bytes) {

@@ -46,11 +46,12 @@ public class ProcessingHub {
 
     public void submitTask(ImtpsTask imtpsTask) {
         threadPool.submit(() -> {
+            imtpsTask.entrustObject(threadPool, this, imtpServer);
             if (imtpsTask.request()) {
                 taskHashMap.put(imtpsTask.getTaskId(), imtpsTask);
-                imtpsTask.setThreadPool(threadPool);
-                imtpsTask.setProcessingHub(this);
                 imtpsTask.startTime();
+            } else {
+                imtpsTask.finish(false);
             }
         });
     }
@@ -86,7 +87,11 @@ public class ProcessingHub {
             } else {
                 if (passVerify || !handler.needVerify()) {
                     threadPool.submit(() -> {
-                        handler.handle(new ImtpsExchange(imtpServer, dataPacket));
+                        try {
+                            handler.handle(new ImtpsExchange(imtpServer, dataPacket));
+                        } catch (Exception e) {
+                            imtpsLogger.log(ImtpsLogger.LEVEL_ERROR, "ImtpHandler [$] 出现未捕获的异常", dataPacket.getHeadCode(), e);
+                        }
                     });
                 } else {
                     String remoteAddress = "null";

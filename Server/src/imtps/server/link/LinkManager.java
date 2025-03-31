@@ -6,16 +6,13 @@ import imtps.server.log.ImtpsLogger;
 import imtps.server.process.ProcessingHub;
 import imtps.server.security.SecureManager;
 
-import javax.crypto.*;
+import javax.crypto.SecretKey;
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
-import java.security.InvalidAlgorithmParameterException;
-import java.security.InvalidKeyException;
-import java.security.NoSuchAlgorithmException;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Queue;
@@ -93,7 +90,7 @@ public abstract class LinkManager extends Thread {
         stopRunning();
         threadPool.shutdown();
         for (SelectionKey selectionKey : selector.keys()) {
-            cancel(selectionKey, "LinkManagerShutdown");
+            cancel(selectionKey, false, "LinkManagerShutdown");
         }
     }
 
@@ -133,11 +130,12 @@ public abstract class LinkManager extends Thread {
             imtpsLogger.log(ImtpsLogger.LEVEL_WARN, "连接数已达到上限 [$]，连接 [$] 已关闭", maxLinkCount, socketAddress);
         }
     }
-    public void cancel(SelectionKey selectionKey, String reason) {
+    public void cancel(SelectionKey selectionKey, boolean wait, String reason) {
         if (sendStateHashMap.remove(selectionKey) != null) {
             waitSendHashMap.remove(selectionKey);
             heartBeat.removeLastActivityTime(selectionKey);
             int tempLinkCount = currentLinkCount.decrementAndGet();
+            CountDownLatch latch = new CountDownLatch(1);
             Runnable runnable = () -> {
                 if (selectionKey.isValid()) {
                     try {
@@ -153,10 +151,16 @@ public abstract class LinkManager extends Thread {
                 } else {
                     imtpsLogger.log(ImtpsLogger.LEVEL_DEBUG, "重复从 [$] 中注销连接 - ($)", simpleClassName, reason);
                 }
+                latch.countDown();
             };
             if (running) {
                 eventQueue.add(runnable);
                 selector.wakeup();
+                if (wait) {
+                    try {
+                        latch.await();
+                    } catch (InterruptedException ignored) {}
+                }
             } else {
                 runnable.run();
             }
@@ -238,12 +242,12 @@ public abstract class LinkManager extends Thread {
             DataPacket dataPacket = new DataPacket();
             try {
                 if (!dataPacket.read(selectionKey, processingHub)) {
-                    cancel(selectionKey, "客户端主动关闭");
+                    cancel(selectionKey, false, "客户端主动关闭");
                     return;
                 }
             } catch (Exception e) {
                 imtpsLogger.log(ImtpsLogger.LEVEL_ERROR, "接收数据包时出错", e);
-                cancel(selectionKey, "接收数据包时出错");
+                cancel(selectionKey, false, "接收数据包时出错");
                 return;
             } finally {
                 sendStateHashMap.put(selectionKey, SendState.Leisure);
@@ -276,7 +280,7 @@ public abstract class LinkManager extends Thread {
                 dataPacket.write(selectionKey, processingHub.getSendTransferSchedule(dataPacket.getTaskId()));
             } catch (Exception e) {
                 imtpsLogger.log(ImtpsLogger.LEVEL_ERROR, "接发送数据包时出错", e);
-                cancel(selectionKey, "发送数据包时出错");
+                cancel(selectionKey, false, "发送数据包时出错");
                 return;
             } finally {
                 sendStateHashMap.put(selectionKey, SendState.Leisure);
@@ -325,7 +329,7 @@ public abstract class LinkManager extends Thread {
                             SelectionKey selectionKey = entry.getKey();
                             if (sendStateHashMap.get(selectionKey) == SendState.Leisure && nowTime - entry.getValue() > HEARTBEAT_INTERVAL) {
                                 if (selectionKey.channel().isOpen()) {
-                                    cancel(selectionKey, "心跳超时");
+                                    cancel(selectionKey, false, "心跳超时");
                                 } else {
                                     lastActivityTime.remove(selectionKey);
                                 }

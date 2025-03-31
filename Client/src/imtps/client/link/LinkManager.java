@@ -5,18 +5,18 @@ import imtps.client.datapacket.DataPacket;
 import imtps.client.datapacket.code.Type;
 import imtps.client.datapacket.code.Way;
 import imtps.client.datapacket.databody.TextDataBody;
+import imtps.client.event.ImtpsEventCatch;
 import imtps.client.log.ImtpsLogger;
 import imtps.client.process.ProcessingHub;
 import imtps.client.security.SecureManager;
 
-import javax.crypto.*;
+import javax.crypto.SecretKey;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
-import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.security.spec.InvalidKeySpecException;
@@ -33,19 +33,20 @@ import java.util.concurrent.*;
  */
 public class LinkManager extends Thread {
     private final Selector selector;
-    private ExecutorService threadPool;
     private final ConcurrentLinkedQueue<Runnable> eventQueue;
     private final ConcurrentHashMap<SelectionKey, SendState> sendStateHashMap;
     private final ConcurrentHashMap<SelectionKey, Queue<DataPacket>> waitSendHashMap;
     private boolean running;
-    private InetSocketAddress serverAddress;
     private final Object lock = new Object();
+    private ExecutorService threadPool;
+    private InetSocketAddress serverAddress;
 
     private final HeartBeat heartBeat;
     private final LinkTable linkTable;
     private final ProcessingHub processingHub;
-    private final ImtpsLogger imtpsLogger;
     private final SecureManager secureManager;
+    private final ImtpsLogger imtpsLogger;
+    private ImtpsEventCatch imtpsEventCatch;
 
     public LinkManager(SecureManager secureManager, LinkTable linkTable, ProcessingHub processingHub, ImtpsLogger imtpsLogger) throws IOException {
         selector = Selector.open();
@@ -53,10 +54,10 @@ public class LinkManager extends Thread {
         waitSendHashMap = new ConcurrentHashMap<>();
         sendStateHashMap = new ConcurrentHashMap<>();
         heartBeat = new HeartBeat();
+        this.secureManager = secureManager;
         this.linkTable = linkTable;
         this.processingHub = processingHub;
         this.imtpsLogger = imtpsLogger;
-        this.secureManager = secureManager;
 
         threadPool = new ThreadPoolExecutor(3, Runtime.getRuntime().availableProcessors(), 180
                 , TimeUnit.SECONDS, new ArrayBlockingQueue<>(64), new ThreadPoolExecutor.CallerRunsPolicy());
@@ -98,6 +99,9 @@ public class LinkManager extends Thread {
     }
     public void setThreadPool(ExecutorService threadPool) {
         this.threadPool = threadPool;
+    }
+    public void setImtpsEventCatch(ImtpsEventCatch imtpsEventCatch) {
+        this.imtpsEventCatch = imtpsEventCatch;
     }
 
     public void register(SocketChannel socketChannel, SecretKey secretKey, String linkName) throws IOException {
@@ -264,16 +268,19 @@ public class LinkManager extends Thread {
             try {
                 if (!dataPacket.read(selectionKey, processingHub)) {
                     cancel(selectionKey, "服务端主动关闭");
-                    processingHub.work(new DataPacket(Way.LINK_CLOSE, Type.INITIATIVE));
+                    imtpsEventCatch.serverClose();
                     return;
                 }
             } catch (Exception e) {
                 imtpsLogger.log(ImtpsLogger.LEVEL_ERROR, "接收数据包时出错", e);
                 cancel(selectionKey, "接收数据包时出错");
+                imtpsEventCatch.readBreak();
                 if (selectionKey.equals(heartBeat.baseSelectionKey)) {
-                    if (!againLink()) {
+                    if (againLink()) {
+                        imtpsEventCatch.againLink(true);
+                    } else {
+                        imtpsEventCatch.againLink(false);
                         imtpsLogger.log(ImtpsLogger.LEVEL_INFO, "重新连接服务器失败");
-                        processingHub.work(new DataPacket(Way.LINK_CLOSE, Type.PASSIVITY));
                     }
                 }
                 return;
@@ -329,10 +336,13 @@ public class LinkManager extends Thread {
             } catch (Exception e) {
                 imtpsLogger.log(ImtpsLogger.LEVEL_ERROR, "发送数据包时出错", e);
                 cancel(selectionKey, "发送数据包时出错");
+                imtpsEventCatch.writeBreak();
                 if (selectionKey.equals(heartBeat.baseSelectionKey)) {
-                    if (!againLink()) {
+                    if (againLink()) {
+                        imtpsEventCatch.againLink(true);
+                    } else {
+                        imtpsEventCatch.againLink(false);
                         imtpsLogger.log(ImtpsLogger.LEVEL_INFO, "重新连接服务器失败");
-                        processingHub.work(new DataPacket(Way.LINK_CLOSE, Type.PASSIVITY));
                     }
                 }
                 return;

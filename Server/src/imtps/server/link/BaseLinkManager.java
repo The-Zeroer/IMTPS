@@ -33,7 +33,7 @@ public class BaseLinkManager extends LinkManager {
     @Override
     protected void extraCancel(SelectionKey selectionKey) {
         linkTable.cancel(selectionKey);
-        fileLinkManager.cancel(selectionKey, "跟随BaseLinkManager");
+        fileLinkManager.cancel(selectionKey, false, "跟随BaseLinkManager");
     }
 
     @Override
@@ -53,7 +53,7 @@ public class BaseLinkManager extends LinkManager {
                 imtpsLogger.log(ImtpsLogger.LEVEL_WARN, "重新建立的连接 [$] Token验证成功，并关联UID [$]", remoteAddress, UID);
             } else {
                 imtpsLogger.log(ImtpsLogger.LEVEL_WARN, "重新建立的连接 [$] Token验证失败", remoteAddress);
-                cancel(selectionKey, "Token验证失败");
+                cancel(selectionKey, false, "Token验证失败");
             }
         }
     }
