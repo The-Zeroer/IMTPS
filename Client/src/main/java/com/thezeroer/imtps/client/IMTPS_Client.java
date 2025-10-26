@@ -11,7 +11,6 @@ import com.thezeroer.imtps.client.event.ImtpsEventCatch;
 import com.thezeroer.imtps.client.log.ImtpsLogger;
 import com.thezeroer.imtps.client.process.handler.ImtpsHandler;
 import com.thezeroer.imtps.client.process.task.AbstractTask;
-import com.thezeroer.imtps.client.process.task.ImtpsTask;
 import com.thezeroer.imtps.client.process.ProcessingHub;
 import com.thezeroer.imtps.client.session.channel.AcceptChannel;
 import com.thezeroer.imtps.client.session.channel.ImtpsChannel;
