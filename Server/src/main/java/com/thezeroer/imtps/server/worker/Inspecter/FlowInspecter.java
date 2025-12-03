@@ -1,7 +1,5 @@
 package com.thezeroer.imtps.server.worker.Inspecter;
 
-import com.thezeroer.imtps.server.log.ImtpsLogger;
-
 import java.net.InetAddress;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -57,6 +55,6 @@ public final class FlowInspecter extends Inspecter {
 
     @Override
     protected void log() {
-        imtpsLogger.log(ImtpsLogger.LEVEL_INFO, "FlowInspecter拦截记录$", logSheet);
+        log.info("FlowInspecter拦截记录{}", logSheet);
     }
 }

@@ -1,12 +1,13 @@
 package com.thezeroer.imtps.server.worker;
 
 import com.thezeroer.imtps.server.buffer.BufferManager;
-import com.thezeroer.imtps.server.log.ImtpsLogger;
 import com.thezeroer.imtps.server.security.ImtpsSecretKey;
 import com.thezeroer.imtps.server.session.ImtpsSession;
 import com.thezeroer.imtps.server.session.SessionUtil;
 import com.thezeroer.imtps.server.session.channel.AcceptChannel;
 import com.thezeroer.imtps.server.session.channel.ImtpsChannel;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -18,7 +19,6 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 会话握手器
@@ -28,6 +28,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @version 1.0.0
  */
 public class SessionHandshaker extends Thread {
+    private static final Logger log = LoggerFactory.getLogger(SessionHandshaker.class);
     private final Selector selector;
     private final LinkedBlockingQueue<AcceptChannel> transmitQueue;
     private final Map<String, AcceptChannel> verifyMap;
@@ -36,9 +37,8 @@ public class SessionHandshaker extends Thread {
     private final Object lock = new Object();
 
     private final SessionManager sessionManager;
-    private final ImtpsLogger imtpsLogger;
 
-    public SessionHandshaker(SessionManager sessionManager, ImtpsLogger imtpsLogger) throws IOException {
+    public SessionHandshaker(SessionManager sessionManager) throws IOException {
         selector = Selector.open();
         transmitQueue = new LinkedBlockingQueue<>(1024);
         verifyMap = sessionManager.getVerifyMap();
@@ -46,7 +46,6 @@ public class SessionHandshaker extends Thread {
                 , new ArrayBlockingQueue<>(12), new ThreadPoolExecutor.CallerRunsPolicy());
 
         this.sessionManager = sessionManager;
-        this.imtpsLogger = imtpsLogger;
         live = true;
         setName("SessionHandshaker");
     }
@@ -84,7 +83,7 @@ public class SessionHandshaker extends Thread {
     @Override
     public void run() {
         while (live) {
-            imtpsLogger.log(ImtpsLogger.LEVEL_DEBUG, "SessionHandshaker StartRunning");
+            log.debug("SessionHandshaker StartRunning");
             while (running) {
                 try {
                     if (!transmitQueue.isEmpty()) {
@@ -113,19 +112,19 @@ public class SessionHandshaker extends Thread {
                         }
                     }
                 } catch (Exception e) {
-                    imtpsLogger.log(ImtpsLogger.LEVEL_ERROR, "SessionHandshaker AriseError", e);
+                    log.error("SessionHandshaker AriseError", e);
                 }
             }
             if (live) {
                 synchronized (lock) {
-                    imtpsLogger.log(ImtpsLogger.LEVEL_DEBUG, "SessionHandshaker StopRunning");
+                    log.debug("SessionHandshaker StopRunning");
                     try {
                         lock.wait();
                     } catch (InterruptedException ignored) {}
                 }
             }
         }
-        imtpsLogger.log(ImtpsLogger.LEVEL_DEBUG, "SessionHandshaker Shutdown");
+        log.debug("SessionHandshaker Shutdown");
     }
     private void readEvent(SelectionKey selectionKey) {
         threadPool.submit(() -> {
@@ -178,8 +177,8 @@ public class SessionHandshaker extends Thread {
                 }
             } catch (InterruptedException ignored) {
             } catch (Exception e) {
+                log.error("SessionHandshaker[ThreadPool] AriseError", e);
                 closeSelectionKey(selectionKey);
-                imtpsLogger.log(ImtpsLogger.LEVEL_ERROR, "SessionHandshaker[ThreadPool] AriseError", e);
             } finally {
                 if (selectionKey.isValid()) {
                     selectionKey.interestOps(SelectionKey.OP_READ);
@@ -201,8 +200,8 @@ public class SessionHandshaker extends Thread {
                 }
                 verifyMap.put(token, acceptChannel.setString(token));
             } catch (Exception e) {
+                log.error("SessionHandshaker[ThreadPool] AriseError", e);
                 closeSelectionKey(selectionKey);
-                imtpsLogger.log(ImtpsLogger.LEVEL_ERROR, "SessionHandshaker[ThreadPool] AriseError", e);
             } finally {
                 selectionKey.cancel();
             }

@@ -2,6 +2,9 @@ package com.thezeroer.imtps.client.process.task;
 
 import com.thezeroer.imtps.client.datapacket.DataPacket;
 
+import java.util.Collection;
+import java.util.List;
+
 /**
  * IMTPS 任务
  *
@@ -9,17 +12,29 @@ import com.thezeroer.imtps.client.datapacket.DataPacket;
  * @version 1.0.0
  * @since 2025/08/01
  */
-public abstract class ImtpsTask extends AbstractTask<DataPacket> {
-    public ImtpsTask() {
-        this(null);
+public abstract class ImtpsTask extends AbstractTask {
+    private DataPacket requestDataPacket, responseDataPacket;
+
+    @Override
+    public void putRequestDataPacket(DataPacket dataPacket) {
+        requestDataPacket = dataPacket;
     }
-    public ImtpsTask(String taskId) {
-        super(taskId);
+    @Override
+    public DataPacket getResponseDataPacket() {
+        return responseDataPacket;
+    }
+    @Override
+    public Collection<DataPacket> getResponseDataPackets() {
+        return responseDataPacket == null ? List.of() : List.of(responseDataPacket);
     }
 
     @Override
-    public boolean putResponseData(DataPacket dataPacket) {
-        response = dataPacket;
+    public List<DataPacket> getRequestDataPackets() {
+        return requestDataPacket == null ? List.of() : List.of(requestDataPacket);
+    }
+    @Override
+    public boolean putResponseDataPacket(DataPacket dataPacket) {
+        responseDataPacket = dataPacket;
         return true;
     }
 }

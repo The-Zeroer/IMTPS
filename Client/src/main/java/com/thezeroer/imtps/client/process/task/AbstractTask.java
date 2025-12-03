@@ -1,10 +1,13 @@
 package com.thezeroer.imtps.client.process.task;
 
 import com.thezeroer.imtps.client.datapacket.DataPacket;
+import com.thezeroer.imtps.client.session.ImtpsSession;
 import com.thezeroer.imtps.client.util.Tool;
 import com.thezeroer.imtps.client.view.AbstractTransmitView;
 
+import java.nio.charset.StandardCharsets;
 import java.security.NoSuchAlgorithmException;
+import java.util.Collection;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -15,7 +18,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * @since 2025/09/24
  * @version 1.0.0
  */
-public abstract class AbstractTask<T> {
+public abstract class AbstractTask {
     /** 默认模式<br>提交任务后立即返回 */
     public static final byte PATTERN_DEFAULT = 0;
     /** 队列模式<br>如果此时没有等待响应的任务，提交此任务后立即返回<br>否则加入请求队列后立即返回，等待响应后请求 */
@@ -27,9 +30,9 @@ public abstract class AbstractTask<T> {
     private long waitingTime, expirationTime;
     private byte pattern = PATTERN_DEFAULT;
     private final AtomicBoolean live;
-    protected T response;
 
     private AbstractTransmitView sendView, receiveView;
+    private ImtpsSession imtpsSession;
 
     public AbstractTask() {
         this(createTaskId());
@@ -38,20 +41,21 @@ public abstract class AbstractTask<T> {
         if (taskId == null) {
             taskId = createTaskId();
         }
+        if (taskId.getBytes(StandardCharsets.UTF_8).length != 32) {
+            throw new IllegalArgumentException("Task ID must be 32 bytes");
+        }
         this.taskId = taskId;
         waitingTime = 10000L;
         live = new AtomicBoolean(true);
     }
 
-
-    public abstract T request() throws Exception;
-    public abstract void response();
+    public abstract boolean request() throws Exception;
+    public abstract void response() throws Exception;
     public void finish(boolean flag) {}
 
-    public abstract boolean putResponseData(DataPacket dataPacket);
-    public T getResponseData() {
-        return response;
-    }
+    public abstract void putRequestDataPacket(DataPacket dataPacket);
+    public abstract DataPacket getResponseDataPacket();
+    public abstract Collection<DataPacket> getResponseDataPackets();
 
     /**
      * 设置等待时间，默认10秒
@@ -59,7 +63,7 @@ public abstract class AbstractTask<T> {
      * @param seconds 秒
      * @return {@link ImtpsTask }
      */
-    public AbstractTask<?> setWaitingTime(int seconds) {
+    public AbstractTask setWaitingTime(int seconds) {
         this.waitingTime = seconds * 1000L;
         return this;
     }
@@ -69,24 +73,18 @@ public abstract class AbstractTask<T> {
      * @param pattern 模式
      * @return {@link ImtpsTask }
      */
-    public AbstractTask<?> setPattern(byte pattern) {
+    public AbstractTask setPattern(byte pattern) {
         this.pattern = pattern;
         return this;
     }
 
-    public void setSendViewOperationObject(Object object) {
-        sendView.setOperationObject(object);
-    }
-    public void setReceiveViewOperationObject(Object object) {
-        receiveView.setOperationObject(object);
-    }
     /**
      * 设置发送视图
      *
      * @param transmitView 传输视图 {@link AbstractTransmitView}
      * @return {@link ImtpsTask }
      */
-    public AbstractTask<?> setSendView(AbstractTransmitView transmitView) {
+    public AbstractTask setSendView(AbstractTransmitView transmitView) {
         sendView = transmitView;
         return this;
     }
@@ -96,7 +94,7 @@ public abstract class AbstractTask<T> {
      * @param transmitView 传输视图 {@link AbstractTransmitView}
      * @return {@link ImtpsTask }
      */
-    public AbstractTask<?> setReceiveView(AbstractTransmitView transmitView) {
+    public AbstractTask setReceiveView(AbstractTransmitView transmitView) {
         receiveView = transmitView;
         return this;
     }
@@ -105,6 +103,17 @@ public abstract class AbstractTask<T> {
     }
     public AbstractTransmitView getReceiveView() {
         return receiveView;
+    }
+
+    public abstract Collection<DataPacket> getRequestDataPackets();
+    public abstract boolean putResponseDataPacket(DataPacket dataPacket);
+
+    public AbstractTask setImtpsSession(ImtpsSession imtpsSession) {
+        this.imtpsSession = imtpsSession;
+        return this;
+    }
+    public ImtpsSession getImtpsSession() {
+        return imtpsSession;
     }
 
     public byte getPattern() {

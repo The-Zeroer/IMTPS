@@ -18,7 +18,7 @@ import java.util.zip.CRC32;
  */
 public abstract class AbstractDataBody<T> implements Cloneable{
     public enum TYPE {
-        Basic, File,
+        Basic, File, MEDIA
     }
 
     private static final ConcurrentHashMap<Class<?>, Long> bodyMap = new ConcurrentHashMap<>();
@@ -79,8 +79,14 @@ public abstract class AbstractDataBody<T> implements Cloneable{
      * @param metadata 元数据
      */
     public AbstractDataBody<?> setMetadata(byte[] metadata) {
+        if (metadata != null && metadata.length > Short.MAX_VALUE) {
+            throw new ArithmeticException("Metadata too large (max=%d)".formatted(Short.MAX_VALUE));
+        }
         this.metaData = metadata;
         return this;
+    }
+    public short getMetaLength() {
+        return (short) (metaData == null ? 0 : metaData.length);
     }
 
     public final T getData() {
@@ -121,6 +127,7 @@ public abstract class AbstractDataBody<T> implements Cloneable{
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public AbstractDataBody<T> clone() {
         try {
             AbstractDataBody<T> copy = (AbstractDataBody<T>) super.clone();

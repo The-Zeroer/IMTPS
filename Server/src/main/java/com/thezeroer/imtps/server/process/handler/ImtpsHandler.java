@@ -1,5 +1,7 @@
 package com.thezeroer.imtps.server.process.handler;
 
+import com.thezeroer.imtps.server.datapacket.DataPacket;
+
 /**
  * IMTPS 处理程序
  *
@@ -9,13 +11,18 @@ package com.thezeroer.imtps.server.process.handler;
  */
 public abstract class ImtpsHandler {
     private final boolean needVerify;
+    private final DataPacket.WAY way;
+    private String name;
+
     /**
      * IMTPS 处理程序
      *
      * @param needVerify 是否需要验证，true->会话需要有会话名，false->直接通过
+     * @param way 指定方式，允许所有方式则null
      */
-    public ImtpsHandler(boolean needVerify) {
+    public ImtpsHandler(boolean needVerify, DataPacket.WAY way) {
         this.needVerify = needVerify;
+        this.way = way;
     }
     /**
      * 执行
@@ -24,26 +31,16 @@ public abstract class ImtpsHandler {
      */
     public abstract void execute(ImtpsContext imtpsContext);
 
-    /**
-     * 获取方式匹配，null为通配符，多个匹配项使用int[]
-     *
-     * @return {@link int[] }
-     */
-    public abstract Object getWayMatch();
-    /**
-     * 获取类型匹配，null为通配符，多个匹配项使用int[]
-     *
-     * @return {@link int[] }
-     */
-    public abstract Object getTypeMach();
-    /**
-     * 获得额外匹配，null为通配符，多个匹配项使用int[]
-     *
-     * @return {@link int[] }
-     */
-    public abstract Object getExtraMatch();
-
     public final boolean isNeedVerify() {
         return needVerify;
+    }
+    public final DataPacket.WAY getWay() {
+        return way;
+    }
+    public String getName() {
+        return name;
+    }
+    public void setName(String name) {
+        this.name = name;
     }
 }

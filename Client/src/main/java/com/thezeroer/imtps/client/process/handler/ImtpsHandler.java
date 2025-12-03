@@ -1,5 +1,7 @@
 package com.thezeroer.imtps.client.process.handler;
 
+import com.thezeroer.imtps.client.datapacket.DataPacket;
+
 /**
  * IMTPS 处理程序
  *
@@ -8,10 +10,17 @@ package com.thezeroer.imtps.client.process.handler;
  * @since 2025/07/31
  */
 public abstract class ImtpsHandler {
+    private final DataPacket.WAY way;
+    private String name;
+
     /**
      * IMTPS 处理程序
+     *
+     * @param way 指定方式，允许所有方式则null
      */
-    public ImtpsHandler() {}
+    public ImtpsHandler(DataPacket.WAY way) {
+        this.way = way;
+    }
     /**
      * 执行
      *
@@ -19,22 +28,13 @@ public abstract class ImtpsHandler {
      */
     public abstract void execute(ImtpsContext imtpsContext);
 
-    /**
-     * 获取方式匹配，null为通配符
-     *
-     * @return {@link int[] }
-     */
-    public abstract Object getWayMatch();
-    /**
-     * 获取类型匹配，null为通配符
-     *
-     * @return {@link int[] }
-     */
-    public abstract Object getTypeMach();
-    /**
-     * 获得额外匹配，null为通配符
-     *
-     * @return {@link int[] }
-     */
-    public abstract Object getExtraMatch();
+    public final DataPacket.WAY getWay() {
+        return way;
+    }
+    public String getName() {
+        return name;
+    }
+    public void setName(String name) {
+        this.name = name;
+    }
 }

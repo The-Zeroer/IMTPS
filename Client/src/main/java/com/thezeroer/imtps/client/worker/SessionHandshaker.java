@@ -1,10 +1,11 @@
 package com.thezeroer.imtps.client.worker;
 
-import com.thezeroer.imtps.client.log.ImtpsLogger;
 import com.thezeroer.imtps.client.security.ImtpsSecretKey;
 import com.thezeroer.imtps.client.session.ImtpsSession;
 import com.thezeroer.imtps.client.session.channel.AcceptChannel;
 import com.thezeroer.imtps.client.session.channel.ImtpsChannel;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.crypto.BadPaddingException;
 import javax.crypto.IllegalBlockSizeException;
@@ -27,12 +28,11 @@ import java.util.Arrays;
  * @since 2025/07/05
  */
 public class SessionHandshaker {
+    private static final Logger log = LoggerFactory.getLogger(SessionHandshaker.class);
     private final SessionManager sessionManager;
-    private final ImtpsLogger imtpsLogger;
 
-    public SessionHandshaker(SessionManager sessionManager, ImtpsLogger imtpsLogger) {
+    public SessionHandshaker(SessionManager sessionManager) {
         this.sessionManager = sessionManager;
-        this.imtpsLogger = imtpsLogger;
     }
 
     public boolean transmit(AcceptChannel acceptChannel) throws IOException, NoSuchAlgorithmException, InvalidKeyException, InvalidKeySpecException, InvalidAlgorithmParameterException, NoSuchPaddingException, IllegalBlockSizeException, BadPaddingException {
@@ -54,7 +54,7 @@ public class SessionHandshaker {
                 sessionManager.transmit(acceptChannel.setImtpsSecretKey(imtpsSecretKey).setString(new String(imtpsSecretKey.decrypt(byteBuffer.array()))), true);
                 return true;
             } else {
-                imtpsLogger.log(ImtpsLogger.LEVEL_WARN, "与服务器握手失败[finishedMessage错误]");
+                log.warn("与服务器握手失败[finishedMessage错误]");
                 return false;
             }
         } else {

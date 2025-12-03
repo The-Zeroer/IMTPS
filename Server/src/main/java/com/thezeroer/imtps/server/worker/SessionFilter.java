@@ -1,9 +1,10 @@
 package com.thezeroer.imtps.server.worker;
 
-import com.thezeroer.imtps.server.log.ImtpsLogger;
 import com.thezeroer.imtps.server.session.channel.AcceptChannel;
 import com.thezeroer.imtps.server.worker.Inspecter.CountInspecter;
 import com.thezeroer.imtps.server.worker.Inspecter.Inspecter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.Set;
@@ -17,6 +18,7 @@ import java.util.concurrent.*;
  * @version 1.0.0
  */
 public class SessionFilter extends Thread {
+    private static final Logger log = LoggerFactory.getLogger(SessionFilter.class);
     private final LinkedBlockingQueue<AcceptChannel> transmitQueue;
     private final ConcurrentHashMap<String, Inspecter> inspecterMap;
     private final Set<Inspecter> inspecterSet;
@@ -26,9 +28,8 @@ public class SessionFilter extends Thread {
 
     private final SessionHandshaker sessionHandshaker;
     private final SessionManager sessionManager;
-    private final ImtpsLogger imtpsLogger;
 
-    public SessionFilter(SessionHandshaker sessionHandshaker, SessionManager sessionManager, ImtpsLogger imtpsLogger) {
+    public SessionFilter(SessionHandshaker sessionHandshaker, SessionManager sessionManager) {
         transmitQueue = new LinkedBlockingQueue<>(1024);
         inspecterMap = new ConcurrentHashMap<>();
         inspecterSet = ConcurrentHashMap.newKeySet();
@@ -37,13 +38,12 @@ public class SessionFilter extends Thread {
 
         this.sessionHandshaker = sessionHandshaker;
         this.sessionManager = sessionManager;
-        this.imtpsLogger = imtpsLogger;
         live = true;
         setName("SessionFilter");
     }
 
     public void transmit(AcceptChannel acceptChannel) throws InterruptedException {
-        imtpsLogger.log(ImtpsLogger.LEVEL_DEBUG, "连接[$][$]建立", acceptChannel.getType(), acceptChannel.getSocketAddress());
+        log.debug("连接[{}][{}]建立", acceptChannel.getType(), acceptChannel.getSocketAddress());
         transmitQueue.put(acceptChannel);
     }
 
@@ -75,7 +75,7 @@ public class SessionFilter extends Thread {
     @Override
     public void run() {
         while (live) {
-            imtpsLogger.log(ImtpsLogger.LEVEL_DEBUG, "SessionFilter StartRunning");
+            log.debug("SessionFilter StartRunning");
             try {
                 while (running) {
                     AcceptChannel acceptChannel = transmitQueue.take();
@@ -92,14 +92,14 @@ public class SessionFilter extends Thread {
             } catch (InterruptedException ignored) {}
             if (live) {
                 synchronized (lock) {
-                    imtpsLogger.log(ImtpsLogger.LEVEL_DEBUG, "SessionFilter StopRunning");
+                    log.debug("SessionFilter StopRunning");
                     try {
                         lock.wait();
                     } catch (InterruptedException ignored) {}
                 }
             }
         }
-        imtpsLogger.log(ImtpsLogger.LEVEL_DEBUG, "SessionFilter Shutdown");
+        log.debug("SessionFilter Shutdown");
     }
 
     public void setThreadPool(ExecutorService threadPool) {

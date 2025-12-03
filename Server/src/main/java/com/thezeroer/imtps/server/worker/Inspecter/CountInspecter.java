@@ -1,6 +1,5 @@
 package com.thezeroer.imtps.server.worker.Inspecter;
 
-import com.thezeroer.imtps.server.log.ImtpsLogger;
 import com.thezeroer.imtps.server.worker.SessionManager;
 
 import java.net.InetAddress;
@@ -44,7 +43,7 @@ public final class CountInspecter extends Inspecter {
 
     @Override
     protected void log() {
-        imtpsLogger.log(ImtpsLogger.LEVEL_INFO, "CountInspecter拦截记录$", logSheet);
+        log.info("CountInspecter拦截记录{}", logSheet);
     }
 
     public void setSessionManager(SessionManager sessionManager) {

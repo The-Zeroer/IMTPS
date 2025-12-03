@@ -121,6 +121,10 @@ public class FileDataBody extends AbstractDataBody<File> {
         srcFileName = new String(metadata, StandardCharsets.UTF_8);
         return this;
     }
+    @Override
+    public short getMetaLength() {
+        return (short) (srcFileName == null ? 0 : srcFileName.getBytes(StandardCharsets.UTF_8).length);
+    }
 
     private File createTempFile() {
         String baseName, extension = "";
@@ -153,7 +157,7 @@ public class FileDataBody extends AbstractDataBody<File> {
     @Override
     public String toString() {
         if (data != null) {
-            return "(srcFileName=" + srcFileName + ", fileSize=" + DataPacket.formatBytes(size) + ", currentPath=" + data.getAbsolutePath() + ")";
+            return "(srcFileName=" + srcFileName + ", currentPath=" + data.getAbsolutePath() + ")";
         } else {
             return super.toString();
         }

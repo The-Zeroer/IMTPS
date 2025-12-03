@@ -2,17 +2,15 @@ package com.thezeroer.imtps.server;
 
 import com.thezeroer.imtps.server.address.AddressManager;
 import com.thezeroer.imtps.server.datapacket.DataPacket;
-import com.thezeroer.imtps.server.datapacket.PacketHandler;
+import com.thezeroer.imtps.server.datapacket.PacketCodec;
 import com.thezeroer.imtps.server.datapacket.databody.AbstractDataBody;
 import com.thezeroer.imtps.server.datapacket.databody.FileDataBody;
 import com.thezeroer.imtps.server.datapacket.databody.ObjectDataBody;
 import com.thezeroer.imtps.server.datapacket.databody.TextDataBody;
-import com.thezeroer.imtps.server.log.ImtpsLogger;
-import com.thezeroer.imtps.server.log.LogHandler;
+import com.thezeroer.imtps.server.process.HandlerRegistry;
 import com.thezeroer.imtps.server.process.handler.ImtpsHandler;
 import com.thezeroer.imtps.server.process.task.AbstractTask;
-import com.thezeroer.imtps.server.process.task.ImtpsTask;
-import com.thezeroer.imtps.server.process.ProcessingHub;
+import com.thezeroer.imtps.server.process.DataPacketDispatcher;
 import com.thezeroer.imtps.server.session.ImtpsSession;
 import com.thezeroer.imtps.server.session.channel.ImtpsChannel;
 import com.thezeroer.imtps.server.worker.Inspecter.Inspecter;
@@ -20,9 +18,11 @@ import com.thezeroer.imtps.server.worker.SessionAcceptor;
 import com.thezeroer.imtps.server.worker.SessionFilter;
 import com.thezeroer.imtps.server.worker.SessionHandshaker;
 import com.thezeroer.imtps.server.worker.SessionManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.event.Level;
 
 import java.io.IOException;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.StandardSocketOptions;
 import java.nio.channels.ServerSocketChannel;
@@ -39,57 +39,62 @@ import java.util.function.Supplier;
  * @version 1.0.0
  */
 public class IMTPS_Server {
+    private static final Logger log = LoggerFactory.getLogger(IMTPS_Server.class);
     private final SessionAcceptor sessionAcceptor;
     private final SessionFilter sessionFilter;
     private final SessionHandshaker sessionHandshaker;
     private final SessionManager sessionManager;
-    private final PacketHandler packetHandler;
-    private final ProcessingHub processingHub;
+    private final PacketCodec packetCodec;
+    private final DataPacketDispatcher dataPacketDispatcher;
     private final AddressManager addressManager;
-    private final ImtpsLogger imtpsLogger;
 
     public IMTPS_Server() throws IOException {
-        imtpsLogger = new ImtpsLogger();
         addressManager = new AddressManager();
-        packetHandler = new PacketHandler(imtpsLogger);
-        processingHub = new ProcessingHub(packetHandler, imtpsLogger);
-        sessionManager = new SessionManager(packetHandler, processingHub, addressManager, imtpsLogger);
-        sessionHandshaker = new SessionHandshaker(sessionManager, imtpsLogger);
-        sessionFilter = new SessionFilter(sessionHandshaker, sessionManager, imtpsLogger);
-        sessionAcceptor = new SessionAcceptor(sessionFilter, imtpsLogger);
-        processingHub.transmitObject(sessionManager);
+        packetCodec = new PacketCodec();
+        dataPacketDispatcher = new DataPacketDispatcher(packetCodec);
+        sessionManager = new SessionManager(packetCodec, dataPacketDispatcher, addressManager);
+        sessionHandshaker = new SessionHandshaker(sessionManager);
+        sessionFilter = new SessionFilter(sessionHandshaker, sessionManager);
+        sessionAcceptor = new SessionAcceptor(sessionFilter);
+        dataPacketDispatcher.transmitObject(sessionManager);
 
-        packetHandler.registerDataBody(TextDataBody::new);
-        packetHandler.registerDataBody(FileDataBody::new);
-        packetHandler.registerDataBody(ObjectDataBody::new);
+        packetCodec.registerDataBody(TextDataBody::new);
+        packetCodec.registerDataBody(FileDataBody::new);
+        packetCodec.registerDataBody(ObjectDataBody::new);
     }
 
     /**
      * 开始运行
      */
     public void startRunning() {
+        log.info("Starting IMTPS-Server");
         sessionAcceptor.startRunning();
         sessionFilter.startRunning();
         sessionHandshaker.startRunning();
         sessionManager.startRunning();
+        log.info("IMTPS-Server started");
     }
     /**
      * 停止运行
      */
     public void stopRunning() {
+        log.info("Stopping IMTPS-Server");
         sessionAcceptor.stopRunning();
         sessionFilter.stopRunning();
         sessionHandshaker.stopRunning();
         sessionManager.stopRunning();
+        log.info("IMTPS-Server stopped");
     }
     /**
      * 关闭
      */
     public void shutdown() {
+        log.info("Shutting down IMTPS-Server");
         sessionAcceptor.shutdown();
         sessionFilter.shutdown();
         sessionHandshaker.shutdown();
         sessionManager.shutdown();
+        log.info("IMTPS-Server shut down");
     }
 
     /**
@@ -106,9 +111,9 @@ public class IMTPS_Server {
             sessionAcceptor.registerServerChannel(serverSocketChannel, channelType);
             int binPort = serverSocketChannel.socket().getLocalPort();
             addressManager.setLocalPort(channelType, binPort);
-            imtpsLogger.log(ImtpsLogger.LEVEL_INFO, "[$]端口[$]绑定成功", channelType.name(), binPort);
+            log.info("[{}]端口[{}]绑定成功", channelType.name(), binPort);
         } catch (IOException e) {
-            imtpsLogger.log(ImtpsLogger.LEVEL_ERROR, "[$]端口[$]绑定失败", channelType.name(), port, e);
+            log.error("[{}]端口[{}]绑定失败", channelType.name(), port, e);
             serverSocketChannel.close();
             throw e;
         }
@@ -129,9 +134,9 @@ public class IMTPS_Server {
             sessionAcceptor.registerServerChannel(serverSocketChannel, channelType);
             int binPort = serverSocketChannel.socket().getLocalPort();
             addressManager.setLocalPort(channelType, binPort);
-            imtpsLogger.log(ImtpsLogger.LEVEL_INFO, "[$]端口[$:$]绑定成功", channelType.name(), hostName, binPort);
+            log.info("[{}]端口[{}:{}]绑定成功", channelType.name(), hostName, binPort);
         } catch (IOException e) {
-            imtpsLogger.log(ImtpsLogger.LEVEL_ERROR, "[$]端口[$:$]绑定失败", channelType.name(), hostName, port, e);
+            log.error("[{}]端口[{}:{}]绑定失败", channelType.name(), hostName, port, e);
             serverSocketChannel.close();
             throw e;
         }
@@ -170,9 +175,9 @@ public class IMTPS_Server {
      *
      * @param task 任务
      */
-    public boolean submitTask(AbstractTask<?> task, String sessionName) {
+    public boolean submitTask(AbstractTask task, String sessionName) {
         if (task != null && sessionManager.getNameToSessionHashMap().get(sessionName) instanceof ImtpsSession imtpsSession) {
-            processingHub.submitTask(task.setImtpsSession(imtpsSession));
+            dataPacketDispatcher.submitTask(task.setImtpsSession(imtpsSession));
             return true;
         }
         return false;
@@ -183,7 +188,7 @@ public class IMTPS_Server {
      * @param taskId 任务 ID
      */
     public IMTPS_Server removeTask(String taskId) {
-        processingHub.removeTask(taskId);
+        dataPacketDispatcher.removeTask(taskId);
         return this;
     }
 
@@ -204,21 +209,14 @@ public class IMTPS_Server {
     }
 
     /**
-     * 添加处理程序
+     * 注册数据包处理程序
      *
-     * @param handler 处理器
-     */
-    public IMTPS_Server registerHandler(ImtpsHandler handler) {
-        processingHub.registerHandler(handler);
-        return this;
-    }
-    /**
-     * 处理中心冻结，完成注册后 freeze 提升查找性能
-     *
+     * @param matcher 匹配器
+     * @param handler 处理程序
      * @return {@link IMTPS_Server }
      */
-    public IMTPS_Server processingHubFreeze() {
-        processingHub.freezeHandlerTrieRouter();
+    public IMTPS_Server registerHandler(HandlerRegistry.PathsMatcher matcher, ImtpsHandler handler) {
+        dataPacketDispatcher.registerHandler(matcher, handler);
         return this;
     }
 
@@ -270,27 +268,11 @@ public class IMTPS_Server {
      */
     public IMTPS_Server registerDataBody(Supplier<? extends AbstractDataBody<?>> constructor) {
         if (constructor != null) {
-            packetHandler.registerDataBody(constructor);
+            packetCodec.registerDataBody(constructor);
         }
         return this;
     }
 
-    /**
-     * 设置记录日志的级别，默认记录所有日志
-     *
-     * @param level 低于此级别的日志不记录
-     */
-    public void setLoggerLevel(byte level) {
-        imtpsLogger.setLevel(level);
-    }
-    /**
-     * 设置日志处理，日志默认输出到控制台
-     *
-     * @param logHandler 日志处理接口
-     */
-    public void setLoggerHandler(LogHandler logHandler) {
-        imtpsLogger.setLogHandler(logHandler);
-    }
     /**
      * 设置文件缓存路径，默认路径为".\ImtpFileCache\"，创建失败时路径为".\"
      *
@@ -337,14 +319,14 @@ public class IMTPS_Server {
         return this;
     }
     /**
-     * 设置处理中心线程池
+     * 设置数据包分发器线程池
      *
      * @param threadPool 线程池
      * @return {@link IMTPS_Server }
      */
-    public IMTPS_Server setProcessingHubThreadPool(ExecutorService threadPool) {
+    public IMTPS_Server setPacketDispatcherThreadPool(ExecutorService threadPool) {
         if (threadPool != null) {
-            processingHub.setThreadPool(threadPool);
+            dataPacketDispatcher.setThreadPool(threadPool);
         }
         return this;
     }

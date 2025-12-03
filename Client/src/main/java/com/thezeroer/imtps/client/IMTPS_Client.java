@@ -2,20 +2,22 @@ package com.thezeroer.imtps.client;
 
 import com.thezeroer.imtps.client.address.AddressManager;
 import com.thezeroer.imtps.client.datapacket.DataPacket;
-import com.thezeroer.imtps.client.datapacket.PacketHandler;
+import com.thezeroer.imtps.client.datapacket.PacketCodec;
 import com.thezeroer.imtps.client.datapacket.databody.AbstractDataBody;
 import com.thezeroer.imtps.client.datapacket.databody.FileDataBody;
 import com.thezeroer.imtps.client.datapacket.databody.ObjectDataBody;
 import com.thezeroer.imtps.client.datapacket.databody.TextDataBody;
 import com.thezeroer.imtps.client.event.ImtpsEventCatch;
-import com.thezeroer.imtps.client.log.ImtpsLogger;
+import com.thezeroer.imtps.client.process.HandlerRegistry;
 import com.thezeroer.imtps.client.process.handler.ImtpsHandler;
 import com.thezeroer.imtps.client.process.task.AbstractTask;
-import com.thezeroer.imtps.client.process.ProcessingHub;
+import com.thezeroer.imtps.client.process.DataPacketDispatcher;
 import com.thezeroer.imtps.client.session.channel.AcceptChannel;
 import com.thezeroer.imtps.client.session.channel.ImtpsChannel;
 import com.thezeroer.imtps.client.worker.SessionHandshaker;
 import com.thezeroer.imtps.client.worker.SessionManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -32,26 +34,25 @@ import java.util.function.Supplier;
  * @version 1.0.0
  */
 public class IMTPS_Client {
+    private static final Logger log = LoggerFactory.getLogger(IMTPS_Client.class);
     private final SessionHandshaker sessionHandshaker;
     private final SessionManager sessionManager;
-    private final PacketHandler packetHandler;
-    private final ProcessingHub processingHub;
-    private final ImtpsLogger imtpsLogger;
+    private final PacketCodec packetCodec;
+    private final DataPacketDispatcher dataPacketDispatcher;
     private final AddressManager addressManager;
 
     public IMTPS_Client() throws IOException {
-        imtpsLogger = new ImtpsLogger();
         addressManager = new AddressManager();
-        packetHandler = new PacketHandler(imtpsLogger);
-        processingHub = new ProcessingHub(packetHandler, imtpsLogger);
-        sessionManager = new SessionManager(packetHandler, processingHub, addressManager, imtpsLogger);
-        sessionHandshaker = new SessionHandshaker(sessionManager, imtpsLogger);
+        packetCodec = new PacketCodec();
+        dataPacketDispatcher = new DataPacketDispatcher(packetCodec);
+        sessionManager = new SessionManager(packetCodec, dataPacketDispatcher, addressManager);
+        sessionHandshaker = new SessionHandshaker(sessionManager);
         sessionManager.transmitObject(sessionHandshaker);
-        processingHub.transmitObject(sessionManager);
+        dataPacketDispatcher.transmitObject(sessionManager);
 
-        packetHandler.registerDataBody(TextDataBody::new);
-        packetHandler.registerDataBody(FileDataBody::new);
-        packetHandler.registerDataBody(ObjectDataBody::new);
+        packetCodec.registerDataBody(TextDataBody::new);
+        packetCodec.registerDataBody(FileDataBody::new);
+        packetCodec.registerDataBody(ObjectDataBody::new);
     }
 
     /**
@@ -61,9 +62,9 @@ public class IMTPS_Client {
      * @param port 端口
      */
     public boolean linkServer(String host, int port) throws Exception {
-        imtpsLogger.log(ImtpsLogger.LEVEL_INFO, "正在连接服务器[$:$]", host, port);
+        log.info("正在连接服务端[{}:{}]", host, port);
         SocketChannel socketChannel = SocketChannel.open(new InetSocketAddress(host, port));
-        imtpsLogger.log(ImtpsLogger.LEVEL_INFO, "已连接至服务器");
+        log.info("已连接至服务端[{}:{}]", host, port);
         addressManager.setServerHostName(host);
         return sessionHandshaker.transmit(new AcceptChannel(socketChannel, ImtpsChannel.TYPE.Control));
     }
@@ -81,21 +82,27 @@ public class IMTPS_Client {
      *
      */
     public void startRunning() {
+        log.info("Starting IMTPS-Client");
         sessionManager.startRunning();
+        log.info("IMTPS-Client started");
     }
     /**
      * 停止运行
      *
      */
     public void stopRunning() {
+        log.info("Stopping IMTPS-Client");
         sessionManager.stopRunning();
+        log.info("IMTPS-Client stopped");
     }
     /**
      * 关闭
      *
      */
     public void shutdown() {
+        log.info("Shutting down IMTPS-Client");
         sessionManager.shutdown();
+        log.info("IMTPS-Client shut down");
     }
 
     /**
@@ -103,9 +110,9 @@ public class IMTPS_Client {
      *
      * @param task 任务
      */
-    public void submitTask(AbstractTask<?> task) {
+    public void submitTask(AbstractTask task) {
         if (task != null) {
-            processingHub.submitTask(task);
+            dataPacketDispatcher.submitTask(task);
         }
     }
     /**
@@ -114,25 +121,18 @@ public class IMTPS_Client {
      * @param taskId 任务 ID
      */
     public void removeTask(String taskId) {
-        processingHub.removeTask(taskId);
+        dataPacketDispatcher.removeTask(taskId);
     }
 
     /**
-     * 添加处理程序
+     * 注册数据包处理程序
      *
-     * @param handler 处理器
-     */
-    public IMTPS_Client registerHandler(ImtpsHandler handler) {
-        processingHub.registerHandler(handler);
-        return this;
-    }
-    /**
-     * 处理中心冻结，完成注册后 freeze 提升查找性能
-     *
+     * @param matcher 匹配器
+     * @param handler 处理程序
      * @return {@link IMTPS_Client }
      */
-    public IMTPS_Client processingHubFreeze() {
-        processingHub.freezeHandlerTrieRouter();
+    public IMTPS_Client registerHandler(HandlerRegistry.PathsMatcher matcher, ImtpsHandler handler) {
+        dataPacketDispatcher.registerHandler(matcher, handler);
         return this;
     }
 
@@ -153,7 +153,7 @@ public class IMTPS_Client {
      */
     public IMTPS_Client registerDataBody(Supplier<? extends AbstractDataBody<?>> constructor) {
         if (constructor != null) {
-            packetHandler.registerDataBody(constructor);
+            packetCodec.registerDataBody(constructor);
         }
         return this;
     }
@@ -188,7 +188,7 @@ public class IMTPS_Client {
      */
     public IMTPS_Client setProcessingHubThreadPool(ExecutorService threadPool) {
         if (threadPool != null) {
-            processingHub.setThreadPool(threadPool);
+            dataPacketDispatcher.setThreadPool(threadPool);
         }
         return this;
     }

@@ -3,12 +3,15 @@ package com.thezeroer.imtps.server.worker;
 import com.thezeroer.imtps.server.address.AddressManager;
 import com.thezeroer.imtps.server.datapacket.ControlPacket;
 import com.thezeroer.imtps.server.datapacket.DataPacket;
-import com.thezeroer.imtps.server.datapacket.PacketHandler;
-import com.thezeroer.imtps.server.log.ImtpsLogger;
-import com.thezeroer.imtps.server.process.ProcessingHub;
+import com.thezeroer.imtps.server.datapacket.PacketCodec;
+import com.thezeroer.imtps.server.process.DataPacketDispatcher;
+import com.thezeroer.imtps.server.process.task.ImtpsTask;
 import com.thezeroer.imtps.server.session.ImtpsSession;
 import com.thezeroer.imtps.server.session.channel.AcceptChannel;
 import com.thezeroer.imtps.server.session.channel.ImtpsChannel;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.event.Level;
 
 import java.io.IOException;
 import java.nio.channels.SelectionKey;
@@ -25,6 +28,7 @@ import java.util.concurrent.*;
  * @version 1.0.0
  */
 public class SessionManager extends Thread {
+    private static final Logger log = LoggerFactory.getLogger(SessionManager.class);
     private final Selector selector;
     private final LinkedBlockingQueue<AcceptChannel> transmitQueue;
     private final ConcurrentLinkedQueue<Runnable> eventQueue;
@@ -37,12 +41,11 @@ public class SessionManager extends Thread {
     private final Object lock = new Object();
 
     private final EnumMap<ImtpsChannel.TYPE, SelectorWorker> selectorWorkerMapping;
-    private final PacketHandler packetHandler;
-    private final ProcessingHub processingHub;
+    private final PacketCodec packetCodec;
+    private final DataPacketDispatcher dataPacketDispatcher;
     private final AddressManager addressManager;
-    private final ImtpsLogger imtpsLogger;
 
-    public SessionManager(PacketHandler packetHandler, ProcessingHub processingHub, AddressManager addressManager, ImtpsLogger imtpsLogger) throws IOException {
+    public SessionManager(PacketCodec packetCodec, DataPacketDispatcher dataPacketDispatcher, AddressManager addressManager) throws IOException {
         selector = Selector.open();
         transmitQueue = new LinkedBlockingQueue<>(1024);
         eventQueue = new ConcurrentLinkedQueue<>();
@@ -63,12 +66,10 @@ public class SessionManager extends Thread {
                 , TimeUnit.SECONDS, new ArrayBlockingQueue<>(1024), new ThreadPoolExecutor.CallerRunsPolicy());
         this.heartBeat = new HeartBeat();
 
-        this.packetHandler = packetHandler;
-        this.processingHub = processingHub;
+        this.packetCodec = packetCodec;
+        this.dataPacketDispatcher = dataPacketDispatcher;
         this.addressManager = addressManager;
-        this.imtpsLogger = imtpsLogger;
         live = true;
-        setName("SessionManager");
     }
 
     public void transmit(AcceptChannel acceptChannel) throws InterruptedException {
@@ -119,7 +120,7 @@ public class SessionManager extends Thread {
     @Override
     public void run() {
         while (live) {
-            imtpsLogger.log(ImtpsLogger.LEVEL_DEBUG, "SessionManager StartRunning");
+            log.debug("SessionManager StartRunning");
             while (running) {
                 try {
                     if (!transmitQueue.isEmpty()) {
@@ -130,7 +131,7 @@ public class SessionManager extends Thread {
                             ImtpsSession imtpsSession = new ImtpsSession(selectionKey, acceptChannel.getImtpsSecretKey(), acceptChannel.getString());
                             selectionKey.attach(imtpsSession);
                             idToSessionHashMap.put(acceptChannel.getString(), imtpsSession);
-                            imtpsLogger.log(ImtpsLogger.LEVEL_DEBUG, "SessionManager[ProtocolControl]已注册连接[$]", acceptChannel.getSocketAddress());
+                            log.debug("SessionManager[ProtocolControl]已注册连接[{}]", acceptChannel.getSocketAddress());
                         }
                     }
                     while (!eventQueue.isEmpty()) {
@@ -153,19 +154,19 @@ public class SessionManager extends Thread {
                         }
                     }
                 } catch (Exception e) {
-                    imtpsLogger.log(ImtpsLogger.LEVEL_ERROR, "SessionManager[ProtocolControl] AriseError", e);
+                    log.debug("SessionManager[ProtocolControl] AriseError", e);
                 }
             }
             if (live) {
                 synchronized (lock) {
-                    imtpsLogger.log(ImtpsLogger.LEVEL_DEBUG, "SessionManager StopRunning");
+                    log.debug("SessionManager StopRunning");
                     try {
                         lock.wait();
                     } catch (InterruptedException ignored) {}
                 }
             }
         }
-        imtpsLogger.log(ImtpsLogger.LEVEL_DEBUG, "SessionManager Shutdown");
+        log.debug("SessionManager Shutdown");
     }
     private void readEvent(SelectionKey selectionKey) {
         ImtpsSession imtpsSession = (ImtpsSession) selectionKey.attachment();
@@ -177,13 +178,13 @@ public class SessionManager extends Thread {
         threadPool.submit(() -> {
             ControlPacket controlPacket;
             try {
-                controlPacket = packetHandler.readControlPacket(selectionKey, imtpsSession.getImtpsSecretKey());
+                controlPacket = packetCodec.readControlPacket(selectionKey, imtpsSession.getImtpsSecretKey());
                 if (controlPacket == null) {
                     closeChannel(imtpsSession, ImtpsChannel.TYPE.Control, "接收ControlPacket为空");
                     return;
                 }
             } catch (Exception e) {
-                imtpsLogger.log(ImtpsLogger.LEVEL_ERROR, "SessionManager-ReadEvent", e);
+                log.error("SessionManager-ReadEvent", e);
                 closeChannel(imtpsSession, ImtpsChannel.TYPE.Control, "接收ControlPacket出错");
                 return;
             } finally {
@@ -197,11 +198,11 @@ public class SessionManager extends Thread {
                     selector.wakeup();
                 }
             }
-            imtpsLogger.trace("接收ControlPacket[$]", controlPacket);
+            log.trace("接收ControlPacket[{}]", controlPacket);
             try {
                 handleControlPacket(imtpsSession, controlPacket);
             } catch (InterruptedException e) {
-                imtpsLogger.log(ImtpsLogger.LEVEL_ERROR, "SessionManager-HandleControlPacket AriseError", e);
+                log.error("SessionManager-HandleControlPacket AriseError", e);
             }
         });
     }
@@ -216,10 +217,13 @@ public class SessionManager extends Thread {
             try {
                 ConcurrentLinkedQueue<ControlPacket> controlPacketQueue = imtpsSession.getControlChannel().getSendQueue();
                 while (!controlPacketQueue.isEmpty()) {
-                    packetHandler.writeControlPacket(selectionKey, imtpsSession.getImtpsSecretKey(), Objects.requireNonNull(controlPacketQueue.poll()));
+                    if (controlPacketQueue.poll() instanceof ControlPacket controlPacket) {
+                        log.trace("发送ControlPacket[{}]", controlPacket);
+                        packetCodec.writeControlPacket(selectionKey, imtpsSession.getImtpsSecretKey(), controlPacket);
+                    }
                 }
             } catch (Exception e) {
-                imtpsLogger.log(ImtpsLogger.LEVEL_ERROR, "SessionManager-WriteEvent", e);
+                log.error("SessionManager-WriteEvent", e);
                 closeChannel(imtpsSession, ImtpsChannel.TYPE.Control, "发送ControlPacket出错");
             } finally {
                 imtpsSession.getControlChannel().setWriting(false);
@@ -286,9 +290,9 @@ public class SessionManager extends Thread {
                     nameToSessionHashMap.remove(sessionName);
                 }
             }
-            imtpsLogger.log(ImtpsLogger.LEVEL_DEBUG, "关闭通道[$][$][$]", type, imtpsSession.getChannel(type).getSocketAddress(), reason);
+            log.debug("关闭通道[{}][{}][{}]", type, imtpsSession.getChannel(type).getSocketAddress(), reason);
         } catch (Exception e) {
-            imtpsLogger.log(ImtpsLogger.LEVEL_DEBUG, "关闭通道[$][$][$]出错", type, imtpsSession.getChannel(type).getSocketAddress(), reason, e);}
+            log.debug("关闭通道[{}][{}][{}]出错", type, imtpsSession.getChannel(type).getSocketAddress(), reason, e);}
     }
 
     public void setThreadPool(ImtpsChannel.TYPE type, ExecutorService threadPool) {
@@ -346,7 +350,7 @@ public class SessionManager extends Thread {
                                     SelectionKey selectionKey = acceptChannel.getSocketChannel().register(selector, SelectionKey.OP_READ);
                                     imtpsSession.getDataChannel(type).setSelectionKey(selectionKey);
                                     selectionKey.attach(imtpsSession);
-                                    imtpsLogger.log(ImtpsLogger.LEVEL_DEBUG, "SessionManager[$]已注册连接[$]", type.name(), acceptChannel.getSocketAddress());
+                                    log.debug("SessionManager[{}]已注册连接[{}]", type.name(), acceptChannel.getSocketAddress());
                                     switch (type) {
                                         case DataBasic -> putControlPacket(imtpsSession.getControlChannel().getSelectionKey(),
                                                 new ControlPacket(ControlPacket.WAY.READY_DATA_BASIC));
@@ -357,7 +361,7 @@ public class SessionManager extends Thread {
                                         selectionKey.interestOps(selectionKey.interestOps() | SelectionKey.OP_WRITE);
                                     }
                                 } else {
-                                    imtpsLogger.log(ImtpsLogger.LEVEL_WARN, "错误的SessionId来自连接[$]", acceptChannel.getSocketAddress());
+                                    log.warn("错误的SessionId来自连接[{}]", acceptChannel.getSocketAddress());
                                     acceptChannel.getSocketChannel().close();
                                 }
                             }
@@ -382,7 +386,7 @@ public class SessionManager extends Thread {
                             }
                         }
                     } catch (Exception e) {
-                        imtpsLogger.log(ImtpsLogger.LEVEL_ERROR, "SessionManager[$] AriseError", type.name(), e);
+                        log.warn("SessionManager[{}] AriseError", type.name(), e);
                     }
                 }
                 if (live) {
@@ -404,13 +408,13 @@ public class SessionManager extends Thread {
             threadPool.submit(() -> {
                 DataPacket dataPacket;
                 try {
-                    dataPacket= packetHandler.readDataPacket(selectionKey, imtpsSession.getImtpsSecretKey());
+                    dataPacket= packetCodec.readDataPacket(selectionKey, imtpsSession.getImtpsSecretKey());
                     if (dataPacket == null) {
                         closeChannel(imtpsSession, type, "接收DataPacket为空");
                         return;
                     }
                 } catch (Exception e) {
-                    imtpsLogger.log(ImtpsLogger.LEVEL_ERROR, "SessionManager[$]-ReadEvent AriseError", type, e);
+                    log.error("SessionManager[{}]-ReadEvent AriseError", type, e);
                     closeChannel(imtpsSession, type, "接收DataPacket出错");
                     return;
                 } finally {
@@ -424,8 +428,8 @@ public class SessionManager extends Thread {
                         selector.wakeup();
                     }
                 }
-                imtpsLogger.trace("接收DataPacket[$]", dataPacket);
-                processingHub.handleDataPacket(dataPacket, (ImtpsSession) selectionKey.attachment());
+                log.trace("接收DataPacket[{}]", dataPacket);
+                dataPacketDispatcher.handleDataPacket(dataPacket, (ImtpsSession) selectionKey.attachment());
             });
         }
         private void writeEvent(SelectionKey selectionKey) {
@@ -440,12 +444,16 @@ public class SessionManager extends Thread {
                     ConcurrentLinkedQueue<DataPacket> dataPacketQueue = imtpsSession.getDataChannel(type).getSendQueue();
                     while (!dataPacketQueue.isEmpty()) {
                         if (dataPacketQueue.poll() instanceof DataPacket dataPacket) {
-                            packetHandler.writeDataPacket(selectionKey, imtpsSession.getImtpsSecretKey(), dataPacket);
-                            processingHub.submitTaskToTimer(dataPacket.getTask());
+                            if (dataPacket.getTaskId().isEmpty()) {
+                                dataPacket.setTaskId(ImtpsTask.createTaskId());
+                            }
+                            log.trace("发送DataPacket[{}]", dataPacket);
+                            packetCodec.writeDataPacket(selectionKey, imtpsSession.getImtpsSecretKey(), dataPacket);
+                            dataPacketDispatcher.submitTaskToTimer(dataPacket.getTask());
                         }
                     }
                 } catch (Exception e) {
-                    imtpsLogger.log(ImtpsLogger.LEVEL_ERROR, "SessionManager[$]-WriteEvent AriseError", type, e);
+                    log.error("SessionManager[{}]-WriteEvent AriseError", type, e);
                     closeChannel(imtpsSession, type, "发送DataPacket出错");
                 } finally {
                     imtpsSession.getDataChannel(type).setWriting(false);
@@ -515,7 +523,7 @@ public class SessionManager extends Thread {
                 heartBeatPriorityQueue.offer(heartBeatRunnable);
                 heartBeatPriorityQueue.notifyAll();
             }
-            imtpsLogger.log(ImtpsLogger.LEVEL_DEBUG, "心跳验证间隔[$][$]秒", type, interval);
+            log.debug("心跳验证间隔[{}][{}]秒", type, interval);
         }
 
         @Override
@@ -530,7 +538,7 @@ public class SessionManager extends Thread {
                 setHeartBeatRunnable(ImtpsChannel.TYPE.DataFile, 30);
             }
             while (live) {
-                imtpsLogger.log(ImtpsLogger.LEVEL_DEBUG, "HeartBeat StartRunning");
+                log.debug("HeartBeat StartRunning");
                 try {
                     while (running) {
                         HeartBeatRunnable heartBeatRunnable;
@@ -554,16 +562,16 @@ public class SessionManager extends Thread {
                     }
                     if (live) {
                         synchronized (lock) {
-                            imtpsLogger.log(ImtpsLogger.LEVEL_DEBUG, "HeartBeat Stopping");
+                            log.debug("HeartBeat Stopping");
                             lock.wait();
                         }
                     }
                 } catch (InterruptedException ignored) {
                 } catch (Exception e) {
-                    imtpsLogger.log(ImtpsLogger.LEVEL_DEBUG, "HeartBeat AriseError", e);
+                    log.error("HeartBeat AriseError", e);
                 }
             }
-            imtpsLogger.log(ImtpsLogger.LEVEL_DEBUG, "HeartBeat Shutdown");
+            log.debug("HeartBeat Shutdown");
         }
 
         class HeartBeatRunnable implements Runnable, Comparable<HeartBeatRunnable> {
@@ -588,7 +596,7 @@ public class SessionManager extends Thread {
                     ImtpsChannel imtpsChannel = imtpsSession.getChannel(type);
                     if (imtpsChannel.getStatus() == ImtpsChannel.STATUS.Connected && imtpsChannel.getLastActivityTime() + interval < nowTime
                             && !imtpsChannel.isReading() && !imtpsChannel.isWriting()) {
-                        closeChannel(imtpsSession, type, "心跳超时");
+                        closeChannel(imtpsSession, type, type == ImtpsChannel.TYPE.Control ? "心跳超时" : "连接空闲");
                     }
                 }
             }

@@ -20,32 +20,32 @@ public class DefaultTransmitView extends AbstractTransmitView {
     @Override
     public void begin() {
         beginTime = System.currentTimeMillis();
-        if (metadata == null) {
+        if (meta == null) {
             metadataString = "";
         } else {
-            metadataString = new String(metadata, StandardCharsets.UTF_8);
+            metadataString = new String(meta, StandardCharsets.UTF_8);
         }
         System.out.printf("[%s]正在传输数据体[%s], 大小[%s]。\n"
                 , dateFormat.format(beginTime), metadataString
-                , DataPacket.formatBytes(sumSize));
+                , DataPacket.formatByteSize(sumSize));
     }
-
     @Override
     public void run() {
         try {
             while (!Thread.currentThread().isInterrupted()) {
-                printProgress();
                 Thread.sleep(1000);
+                printProgress();
             }
         } catch (InterruptedException ignored) {}
     }
-
     @Override
     public void finish() {
-        Thread.currentThread().interrupt();
         System.out.printf("\r[%s]数据体传输完成[%s], 用时[%s]。\n"
                 , dateFormat.format(System.currentTimeMillis()), metadataString
                 , formatTime((System.currentTimeMillis() - beginTime) / 1000L));
+    }
+    public void close() {
+        Thread.currentThread().interrupt();
     }
 
     private void printProgress() {
@@ -55,7 +55,7 @@ public class DefaultTransmitView extends AbstractTransmitView {
 
         // 计算速度 (字节/秒)
         double speedBps = (elapsed > 0) ? (diffSize * 1000.0 / elapsed) : 0.0;
-        String speedText = DataPacket.formatBytes((long) speedBps) + "/s";
+        String speedText = DataPacket.formatByteSize((long) speedBps) + "/s";
 
         // 计算预计剩余时间
         long remainSize = sumSize - currentSize;
@@ -77,8 +77,8 @@ public class DefaultTransmitView extends AbstractTransmitView {
                 "\r[%s] %.2f%% (%s/%s) | %s | 预计剩余时间 %s",
                 progressBar,
                 percent * 100,
-                DataPacket.formatBytes(currentSize),
-                DataPacket.formatBytes(sumSize),
+                DataPacket.formatByteSize(currentSize),
+                DataPacket.formatByteSize(sumSize),
                 speedText,
                 eta
         );

@@ -1,8 +1,9 @@
 package com.thezeroer.imtps.server.worker;
 
-import com.thezeroer.imtps.server.log.ImtpsLogger;
 import com.thezeroer.imtps.server.session.channel.AcceptChannel;
 import com.thezeroer.imtps.server.session.channel.ImtpsChannel;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.channels.ClosedChannelException;
@@ -21,6 +22,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  * @version 1.0.0
  */
 public class SessionAcceptor extends Thread{
+    private static final Logger log = LoggerFactory.getLogger(SessionAcceptor.class);
     private final Selector selector;
     private final ConcurrentLinkedQueue<Runnable> eventQueue;
     private final EnumMap<ImtpsChannel.TYPE, ServerSocketChannel> channelMapping;
@@ -28,15 +30,13 @@ public class SessionAcceptor extends Thread{
     private final Object lock = new Object();
 
     private final SessionFilter sessionFilter;
-    private final ImtpsLogger imtpsLogger;
 
-    public SessionAcceptor(SessionFilter sessionFilter, ImtpsLogger imtpsLogger) throws IOException {
+    public SessionAcceptor(SessionFilter sessionFilter) throws IOException {
         selector = Selector.open();
         eventQueue = new ConcurrentLinkedQueue<>();
         channelMapping = new EnumMap<>(ImtpsChannel.TYPE.class);
 
         this.sessionFilter = sessionFilter;
-        this.imtpsLogger = imtpsLogger;
         live = true;
         setName("SessionAcceptor");
     }
@@ -46,15 +46,15 @@ public class SessionAcceptor extends Thread{
             try {
                 if (channelMapping.remove(channelType) instanceof ServerSocketChannel oldServerSocketChannel) {
                     oldServerSocketChannel.close();
-                    imtpsLogger.log(ImtpsLogger.LEVEL_DEBUG, "SessionAcceptor注销监听[$]通道成功", channelType.name());
+                    log.debug("SessionAcceptor注销监听[{}]通道成功", channelType.name());
                 }
                 serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT).attach(channelType);
                 channelMapping.put(channelType, serverSocketChannel);
-                imtpsLogger.log(ImtpsLogger.LEVEL_DEBUG, "SessionAcceptor注册监听[$]通道成功", channelType.name());
+                log.debug("SessionAcceptor注册监听[{}]通道成功", channelType.name());
             } catch (ClosedChannelException e) {
-                imtpsLogger.log(ImtpsLogger.LEVEL_ERROR, "SessionAcceptor注册监听[$]通道出错", channelType.name(), e);
+                log.error("SessionAcceptor注册监听[{}]通道出错", channelType.name(), e);
             } catch (IOException e) {
-                imtpsLogger.log(ImtpsLogger.LEVEL_ERROR, "SessionAcceptor注销监听[$]通道出错", channelType.name(), e);
+                log.error("SessionAcceptor注销监听[{}]通道出错", channelType.name(), e);
             };
         });
         if (running) {
@@ -91,7 +91,7 @@ public class SessionAcceptor extends Thread{
     @Override
     public void run() {
         while (live) {
-            imtpsLogger.log(ImtpsLogger.LEVEL_DEBUG, "SessionAcceptor StartRunning");
+            log.debug("SessionAcceptor StartRunning");
             while (running) {
                 while (!eventQueue.isEmpty()) {
                     Runnable task = eventQueue.poll();
@@ -109,18 +109,18 @@ public class SessionAcceptor extends Thread{
                         }
                     }
                 } catch (IOException e) {
-                    imtpsLogger.log(ImtpsLogger.LEVEL_ERROR, "SessionAcceptor AriseError", e);
+                    log.error("SessionAcceptor AriseError", e);
                 } catch (InterruptedException ignored) {}
             }
             if (live) {
                 synchronized (lock) {
-                    imtpsLogger.log(ImtpsLogger.LEVEL_DEBUG, "SessionAcceptor StopRunning");
+                    log.debug("SessionAcceptor StopRunning");
                     try {
                         lock.wait();
                     } catch (InterruptedException ignored) {}
                 }
             }
         }
-        imtpsLogger.log(ImtpsLogger.LEVEL_DEBUG, "SessionAcceptor Shutdown");
+        log.debug("SessionAcceptor Shutdown");
     }
 }

@@ -3,14 +3,14 @@ package com.thezeroer.imtps.client.datapacket;
 import java.nio.charset.StandardCharsets;
 
 /**
- * 控制包
+ * 控制数据包
  *
  * @author NiZhanBo
  * @version 1.0.0
  * @since 2025/07/16
  */
 public class ControlPacket {
-    public static final int BASIC_HEADER_SIZE = 2;
+    public static final int BASIC_HEADER_LENGTH = 2;
     public static class WAY {
         public static final byte HEART_BEAT = 1;
         public static final byte TOKEN = 2;
@@ -19,7 +19,7 @@ public class ControlPacket {
         public static final byte READY_DATA_BASIC = 121;
         public static final byte READY_DATA_FILE = 122;
     }
-    private final byte[] hander = new byte[BASIC_HEADER_SIZE];
+    private final byte[] hander = new byte[BASIC_HEADER_LENGTH];
     private final byte[] content;
 
     public ControlPacket(byte way) {

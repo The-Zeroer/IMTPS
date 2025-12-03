@@ -1,7 +1,6 @@
 package com.thezeroer.imtps.server.worker.Inspecter;
 
 import com.thezeroer.imtps.server.address.Subnet;
-import com.thezeroer.imtps.server.log.ImtpsLogger;
 
 import java.net.InetAddress;
 import java.util.Set;
@@ -64,7 +63,7 @@ public final class StaticIpInspecter extends Inspecter {
 
     @Override
     protected void log() {
-        imtpsLogger.log(ImtpsLogger.LEVEL_INFO, "StaticIpInspecter[$]模式拦截记录$",pattern.name(), logSheet);
+        log.info("StaticIpInspecter[{}]模式拦截记录{}",pattern.name(), logSheet);
     }
 
     public StaticIpInspecter setPattern(Pattern pattern) {

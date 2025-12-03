@@ -10,7 +10,7 @@ import java.nio.ByteBuffer;
  * @version 1.0.0
  */
 public class BufferManager {
-    private static final int BUFFER_SIZE = 1024 * 64;
+    public static final int BUFFER_SIZE = 1024 * 64;
     private static final ThreadLocal<BufferManager> threadLocal = ThreadLocal.withInitial(BufferManager::new);
     private final ByteBuffer srcBuffer, destBuffer;
 
@@ -19,8 +19,8 @@ public class BufferManager {
     }
 
     private BufferManager() {
-        srcBuffer = ByteBuffer.allocateDirect(BUFFER_SIZE);
-        destBuffer = ByteBuffer.allocateDirect(BUFFER_SIZE);
+        srcBuffer = ByteBuffer.allocate(BUFFER_SIZE);
+        destBuffer = ByteBuffer.allocate(BUFFER_SIZE);
     }
     private BufferManager clear() {
         srcBuffer.clear();
