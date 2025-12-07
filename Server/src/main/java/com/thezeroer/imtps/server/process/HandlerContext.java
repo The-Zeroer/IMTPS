@@ -1,4 +1,4 @@
-package com.thezeroer.imtps.server.process.handler;
+package com.thezeroer.imtps.server.process;
 
 import com.thezeroer.imtps.server.datapacket.DataPacket;
 import com.thezeroer.imtps.server.session.ImtpsSession;
@@ -8,18 +8,18 @@ import com.thezeroer.imtps.server.worker.SessionManager;
 import java.net.InetAddress;
 
 /**
- * IMTPS 上下文
+ * 处理程序上下文
  *
  * @author NiZhanBo
  * @version 1.0.0
  * @since 2025/07/31
  */
-public class ImtpsContext {
+public class HandlerContext {
     private final SessionManager sessionManager;
     private final ImtpsSession imtpsSession;
     private final DataPacket requestDataPacket;
 
-    public ImtpsContext(SessionManager sessionManager, ImtpsSession imtpsSession, DataPacket requestDataPacket) {
+    public HandlerContext(SessionManager sessionManager, ImtpsSession imtpsSession, DataPacket requestDataPacket) {
         this.sessionManager = sessionManager;
         this.imtpsSession = imtpsSession;
         this.requestDataPacket = requestDataPacket;

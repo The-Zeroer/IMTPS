@@ -110,7 +110,7 @@ public class IMTPS_Client {
      *
      * @param task 任务
      */
-    public void submitTask(AbstractTask task) {
+    public void submitTask(AbstractTask<?> task) {
         if (task != null) {
             dataPacketDispatcher.submitTask(task);
         }

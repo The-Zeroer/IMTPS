@@ -2,13 +2,13 @@ package com.thezeroer.imtps.client.datapacket;
 
 import com.thezeroer.imtps.client.buffer.BufferManager;
 import com.thezeroer.imtps.client.datapacket.databody.AbstractDataBody;
+import com.thezeroer.imtps.client.process.TaskWrap;
 import com.thezeroer.imtps.client.security.ImtpsSecretKey;
 import com.thezeroer.imtps.client.view.AbstractTransmitView;
 
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
-import java.util.Arrays;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Supplier;
@@ -24,11 +24,13 @@ public class PacketCodec {
     private static final int MAX_BUFFER_SIZE = BufferManager.BUFFER_SIZE;
     private final ConcurrentHashMap<Long, Supplier<? extends AbstractDataBody<?>>> bodyMap;
     private final ConcurrentHashMap<String, AbstractTransmitView> sendViewMap, receiveViewMap;
+    private final ConcurrentHashMap<String, TaskWrap> taskWrapMap;
 
     private ExecutorService threadPool;
 
     public PacketCodec() {
         bodyMap = new ConcurrentHashMap<>();
+        taskWrapMap = new ConcurrentHashMap<>();
         sendViewMap = new ConcurrentHashMap<>();
         receiveViewMap = new ConcurrentHashMap<>();
     }
@@ -38,6 +40,13 @@ public class PacketCodec {
     }
     public void setThreadPool(ExecutorService threadPool) {
         this.threadPool = threadPool;
+    }
+
+    public void addTaskWrap(TaskWrap taskWrap) {
+        taskWrapMap.put(taskWrap.getTask().getTaskId(), taskWrap);
+    }
+    public void removeTaskWrap(TaskWrap taskWrap) {
+        taskWrapMap.remove(taskWrap.getTask().getTaskId());
     }
 
     public void addSendView(String taskId, AbstractTransmitView transmitView) {
@@ -78,7 +87,7 @@ public class PacketCodec {
         dataPacket.variableHeaderFormBuffer(decryptCipher.doFinal(srcBuffer.flip(), dstBuffer).flip());
         if (dataPacket.getBodyCount() > 0) {
             AbstractDataBody<?>[] bodys = new AbstractDataBody[dataPacket.getBodyCount()];
-            if (sendViewMap.get(dataPacket.getTaskId()) instanceof AbstractTransmitView transmitView) {
+            if (receiveViewMap.get(dataPacket.getTaskId()) instanceof AbstractTransmitView transmitView) {
                 if (transmitView.trySubmit()) {
                     threadPool.submit(transmitView);
                 }

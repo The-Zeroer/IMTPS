@@ -14,16 +14,13 @@ public class ClientTest {
 //        imtpsClient.linkServer("frp-six.com", 10754);
         imtpsClient.submitTask(new ImtpsTask() {
             @Override
-            public boolean request() throws Exception {
-                putRequestDataPacket(DataPacket.build(DataPacket.WAY.DATA_SEND, (short) 1, (short) 2).attach(new TextDataBody("1122")));
-                return true;
+            public DataPacket request() throws Exception {
+                return DataPacket.build(DataPacket.WAY.DATA_SEND, (short) 1, (short) 2).attach(new TextDataBody("1122"));
             }
 
             @Override
-            public void response() throws Exception {
-                for (DataPacket dataPacket : getResponseDataPackets()) {
-                    System.out.println(dataPacket);
-                }
+            public void response(DataPacket dataPacket) throws Exception {
+                System.out.println(dataPacket);
             }
         });
     }

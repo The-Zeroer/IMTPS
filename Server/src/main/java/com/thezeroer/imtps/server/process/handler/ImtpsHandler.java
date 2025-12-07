@@ -1,6 +1,7 @@
 package com.thezeroer.imtps.server.process.handler;
 
 import com.thezeroer.imtps.server.datapacket.DataPacket;
+import com.thezeroer.imtps.server.process.HandlerContext;
 
 /**
  * IMTPS 处理程序
@@ -27,9 +28,9 @@ public abstract class ImtpsHandler {
     /**
      * 执行
      *
-     * @param imtpsContext IMTPS 上下文
+     * @param handlerContext IMTPS 上下文
      */
-    public abstract void execute(ImtpsContext imtpsContext);
+    public abstract void execute(HandlerContext handlerContext);
 
     public final boolean isNeedVerify() {
         return needVerify;

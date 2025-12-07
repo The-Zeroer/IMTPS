@@ -10,11 +10,11 @@ import com.thezeroer.imtps.client.worker.SessionManager;
  * @version 1.0.0
  * @since 2025/07/31
  */
-public class ImtpsContext {
+public class HandlerContext {
     private final SessionManager sessionManager;
     private final DataPacket requestDataPacket;
 
-    public ImtpsContext(SessionManager sessionManager, DataPacket requestDataPacket) {
+    public HandlerContext(SessionManager sessionManager, DataPacket requestDataPacket) {
         this.sessionManager = sessionManager;
         this.requestDataPacket = requestDataPacket;
     }

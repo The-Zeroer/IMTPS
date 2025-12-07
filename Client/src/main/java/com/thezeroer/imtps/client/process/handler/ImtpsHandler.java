@@ -24,9 +24,9 @@ public abstract class ImtpsHandler {
     /**
      * 执行
      *
-     * @param imtpsContext IMTPS 上下文
+     * @param handlerContext IMTPS 上下文
      */
-    public abstract void execute(ImtpsContext imtpsContext);
+    public abstract void execute(HandlerContext handlerContext);
 
     public final DataPacket.WAY getWay() {
         return way;

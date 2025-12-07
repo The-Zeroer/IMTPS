@@ -235,15 +235,17 @@ public class SessionManager extends Thread {
                 if (type == ImtpsChannel.TYPE.Control) {
                     ConcurrentLinkedQueue<ControlPacket> controlPacketQueue = imtpsSession.getControlChannel().getSendQueue();
                     while (!controlPacketQueue.isEmpty()) {
-                        imtpsSession.updateLastActivityTime();
-                        packetCodec.writeControlPacket(selectionKey, imtpsSession.getImtpsSecretKey(), Objects.requireNonNull(controlPacketQueue.poll()));
+                        if (controlPacketQueue.poll() instanceof ControlPacket controlPacket) {
+                            imtpsSession.updateLastActivityTime();
+                            packetCodec.writeControlPacket(selectionKey, imtpsSession.getImtpsSecretKey(), controlPacket);
+                        }
                     }
                 } else {
                     ConcurrentLinkedQueue<DataPacket> dataPacketQueue = imtpsSession.getDataChannel(type).getSendQueue();
                     while (!dataPacketQueue.isEmpty()) {
                         if (dataPacketQueue.poll() instanceof DataPacket dataPacket) {
                             packetCodec.writeDataPacket(selectionKey, imtpsSession.getImtpsSecretKey(), dataPacket);
-                            dataPacketDispatcher.submitTaskToTimer(dataPacket.getTask());
+                            dataPacketDispatcher.submitTaskToTimer(dataPacket.getTaskWrap());
                         }
                     }
                 }

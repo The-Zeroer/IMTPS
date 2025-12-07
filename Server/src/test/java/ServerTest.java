@@ -3,9 +3,7 @@ import com.thezeroer.imtps.server.datapacket.DataPacket;
 import com.thezeroer.imtps.server.datapacket.databody.FileDataBody;
 import com.thezeroer.imtps.server.datapacket.databody.TextDataBody;
 import com.thezeroer.imtps.server.process.HandlerRegistry;
-import com.thezeroer.imtps.server.process.handler.ImtpsContext;
-import com.thezeroer.imtps.server.process.handler.ImtpsHandler;
-import com.thezeroer.imtps.server.process.handler.ProtectedHandler;
+import com.thezeroer.imtps.server.process.HandlerContext;
 import com.thezeroer.imtps.server.process.handler.PublicHandler;
 import com.thezeroer.imtps.server.session.channel.ImtpsChannel;
 
@@ -19,9 +17,9 @@ public class ServerTest {
         imtpsServer.bindAllPort(10086, 0, 0);
         imtpsServer.registerHandler(new HandlerRegistry.PathsMatcher((short) 1, (short) 2), new PublicHandler(null) {
             @Override
-            public void execute(ImtpsContext imtpsContext) {
+            public void execute(HandlerContext handlerContext) {
                 try {
-                    imtpsContext.putResponseDataPacket(DataPacket.build(DataPacket.WAY.SERVER_OK).attach(
+                    handlerContext.putResponseDataPacket(DataPacket.build(DataPacket.WAY.SERVER_OK).attach(
                             new TextDataBody("Hello World!"), new FileDataBody(new File("C:\\appverifUI.dll"))));
                 } catch (FileNotFoundException e) {
                     throw new RuntimeException(e);

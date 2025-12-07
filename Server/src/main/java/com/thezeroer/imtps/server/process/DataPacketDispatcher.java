@@ -2,11 +2,9 @@ package com.thezeroer.imtps.server.process;
 
 import com.thezeroer.imtps.server.datapacket.DataPacket;
 import com.thezeroer.imtps.server.datapacket.PacketCodec;
-import com.thezeroer.imtps.server.process.handler.ImtpsContext;
 import com.thezeroer.imtps.server.process.handler.ImtpsHandler;
 import com.thezeroer.imtps.server.process.task.AbstractTask;
 import com.thezeroer.imtps.server.process.task.ImtpsTask;
-import com.thezeroer.imtps.server.process.task.ImtpsTaskSet;
 import com.thezeroer.imtps.server.session.ImtpsSession;
 import com.thezeroer.imtps.server.view.AbstractTransmitView;
 import com.thezeroer.imtps.server.worker.SessionManager;
@@ -14,7 +12,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Comparator;
-import java.util.List;
 import java.util.PriorityQueue;
 import java.util.concurrent.*;
 
@@ -88,7 +85,7 @@ public class DataPacketDispatcher {
         }
         threadPool.submit(() -> {
            try {
-               handler.execute(new ImtpsContext(sessionManager, imtpsSession, dataPacket));
+               handler.execute(new HandlerContext(sessionManager, imtpsSession, dataPacket));
            } catch (Exception e) {
                 log.error("ImtpHandler[{}]出现未捕获的异常", handler.getName(), e);
                sessionManager.putDataPacket(imtpsSession, DataPacket.build(DataPacket.WAY.SERVER_ERROR));
