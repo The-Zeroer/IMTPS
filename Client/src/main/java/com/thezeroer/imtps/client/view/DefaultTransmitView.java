@@ -40,12 +40,10 @@ public class DefaultTransmitView extends AbstractTransmitView {
     }
     @Override
     public void finish() {
+        Thread.currentThread().interrupt();
         System.out.printf("\r[%s]数据体传输完成[%s], 用时[%s]。\n"
                 , dateFormat.format(System.currentTimeMillis()), metadataString
                 , formatTime((System.currentTimeMillis() - beginTime) / 1000L));
-    }
-    public void close() {
-        Thread.currentThread().interrupt();
     }
 
     private void printProgress() {

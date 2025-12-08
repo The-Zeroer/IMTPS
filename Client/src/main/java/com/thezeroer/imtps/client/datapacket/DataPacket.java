@@ -2,7 +2,6 @@ package com.thezeroer.imtps.client.datapacket;
 
 import com.thezeroer.imtps.client.datapacket.databody.AbstractDataBody;
 import com.thezeroer.imtps.client.process.TaskWrap;
-import com.thezeroer.imtps.client.process.task.AbstractTask;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;

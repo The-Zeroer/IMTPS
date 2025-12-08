@@ -23,7 +23,6 @@ import java.util.function.Supplier;
 public class PacketCodec {
     private static final int MAX_BUFFER_SIZE = BufferManager.BUFFER_SIZE;
     private final ConcurrentHashMap<Long, Supplier<? extends AbstractDataBody<?>>> bodyMap;
-    private final ConcurrentHashMap<String, AbstractTransmitView> sendViewMap, receiveViewMap;
     private final ConcurrentHashMap<String, TaskWrap> taskWrapMap;
 
     private ExecutorService threadPool;
@@ -31,8 +30,6 @@ public class PacketCodec {
     public PacketCodec() {
         bodyMap = new ConcurrentHashMap<>();
         taskWrapMap = new ConcurrentHashMap<>();
-        sendViewMap = new ConcurrentHashMap<>();
-        receiveViewMap = new ConcurrentHashMap<>();
     }
 
     public void registerDataBody(Supplier<? extends AbstractDataBody<?>> constructor) {
@@ -47,19 +44,6 @@ public class PacketCodec {
     }
     public void removeTaskWrap(TaskWrap taskWrap) {
         taskWrapMap.remove(taskWrap.getTask().getTaskId());
-    }
-
-    public void addSendView(String taskId, AbstractTransmitView transmitView) {
-        sendViewMap.put(taskId, transmitView);
-    }
-    public void removeSendView(String taskId) {
-        sendViewMap.remove(taskId);
-    }
-    public void addReceiveView(String taskId, AbstractTransmitView transmitView) {
-        receiveViewMap.put(taskId, transmitView);
-    }
-    public void removeReceiveView(String taskId) {
-        receiveViewMap.remove(taskId);
     }
 
     public DataPacket readDataPacket(SelectionKey selectionKey, ImtpsSecretKey imtpsSecretKey) throws Exception {
@@ -86,100 +70,18 @@ public class PacketCodec {
         }
         dataPacket.variableHeaderFormBuffer(decryptCipher.doFinal(srcBuffer.flip(), dstBuffer).flip());
         if (dataPacket.getBodyCount() > 0) {
+            TaskWrap taskWrap = taskWrapMap.get(dataPacket.getTaskId());
             AbstractDataBody<?>[] bodys = new AbstractDataBody[dataPacket.getBodyCount()];
-            if (receiveViewMap.get(dataPacket.getTaskId()) instanceof AbstractTransmitView transmitView) {
-                if (transmitView.trySubmit()) {
-                    threadPool.submit(transmitView);
-                }
-                for (int i = 0; i < dataPacket.getBodyCount(); i++) {
-                    if (bodyMap.get(dataPacket.getBodyId(i)) instanceof Supplier<? extends AbstractDataBody<?>> supplier) {
-                        AbstractDataBody<?> body = supplier.get();
-                        try {
-                            int bodyMeatLength  = dataPacket.getBodyMeatLength(i);
-                            if (bodyMeatLength > 0) {
-                                srcBuffer = bufferManager.getSrcBuffer(bodyMeatLength);
-                                while (srcBuffer.hasRemaining()) {
-                                    if (socketChannel.read(srcBuffer) == -1) {
-                                        return null;
-                                    }
-                                }
-                                byte[] meat = new byte[bodyMeatLength];
-                                srcBuffer.flip().get(meat);
-                                body.setMetadata(decryptCipher.update(meat));
-                            }
-                            long bodySize = dataPacket.getBodySize(i);
-                            transmitView.setInfo(dataPacket.getPacketIndex(), bodySize, body.getMetadata());
-                            body.prepareDecode(bodySize);
-                            transmitView.begin();
-                            int bufferSize = (int) Math.min(bodySize, MAX_BUFFER_SIZE);
-                            srcBuffer = bufferManager.getSrcBuffer(bufferSize);
-                            dstBuffer = bufferManager.getDestBuffer(bufferSize);
-                            for (long residue = bodySize, handleNumber; residue > 0; residue -= handleNumber) {
-                                if (residue < srcBuffer.remaining()) {
-                                    srcBuffer.limit((int) residue);
-                                }
-                                while (srcBuffer.hasRemaining()) {
-                                    if (socketChannel.read(srcBuffer) == -1) {
-                                        return null;
-                                    }
-                                }
-                                handleNumber = decryptCipher.update(srcBuffer.flip(), dstBuffer.clear());
-                                body.decode(dstBuffer.flip());
-                                srcBuffer.clear();
-                                transmitView.updateSize(handleNumber);
-                            }
-                            body.finishDecode();
-                            bodys[i] = body;
-                        } finally {
-                            body.release();
-                            transmitView.finish();
-                        }
-                    } else {
-                        throw new RuntimeException("未知的AbstractDataBodyId: " + dataPacket.getBodyId(i));
+            for (int i = 0; i < dataPacket.getBodyCount(); i++) {
+                if (bodyMap.get(dataPacket.getBodyId(i)) instanceof Supplier<? extends AbstractDataBody<?>> supplier) {
+                    ProgressUpdater updater = NO_OP_UPDATER;
+                    if (taskWrap != null && taskWrap.hasTransmitView() && taskWrap.getReceiveTransmitView(dataPacket.getPacketIndex()) instanceof AbstractTransmitView transmitView) {
+                        updater = forTransmitView(transmitView);
                     }
-                }
-            } else {
-                for (int i = 0; i < dataPacket.getBodyCount(); i++) {
-                    if (bodyMap.get(dataPacket.getBodyId(i)) instanceof Supplier<? extends AbstractDataBody<?>> supplier) {
-                        AbstractDataBody<?> body = supplier.get();
-                        try {
-                            int bodyMeatLength  = dataPacket.getBodyMeatLength(i);
-                            if (bodyMeatLength > 0) {
-                                srcBuffer = bufferManager.getSrcBuffer(bodyMeatLength);
-                                while (srcBuffer.hasRemaining()) {
-                                    if (socketChannel.read(srcBuffer) == -1) {
-                                        return null;
-                                    }
-                                }
-                                byte[] meat = new byte[bodyMeatLength];
-                                srcBuffer.flip().get(meat);
-                                body.setMetadata(decryptCipher.update(meat));
-                            }
-                            long bodySize = dataPacket.getBodySize(i);
-                            body.prepareDecode(bodySize);
-                            int bufferSize = (int) Math.min(bodySize, MAX_BUFFER_SIZE);
-                            srcBuffer = bufferManager.getSrcBuffer(bufferSize);
-                            dstBuffer = bufferManager.getDestBuffer(bufferSize);
-                            for (long residue = bodySize, handleNumber; residue > 0; residue -= handleNumber) {
-                                if (residue < srcBuffer.remaining()) {
-                                    srcBuffer.limit((int) residue);
-                                }
-                                while (srcBuffer.hasRemaining()) {
-                                    if (socketChannel.read(srcBuffer) == -1) {
-                                        return null;
-                                    }
-                                }
-                                handleNumber = decryptCipher.update(srcBuffer.flip(), dstBuffer.clear());
-                                body.decode(dstBuffer.flip());
-                                srcBuffer.clear();
-                            }
-                            body.finishDecode();
-                            bodys[i] = body;
-                        } finally {
-                            body.release();
-                        }
+                    if (decodeDataBody(supplier.get(), dataPacket, (byte) i, socketChannel, bufferManager, decryptCipher, updater) instanceof AbstractDataBody<?> body) {
+                        bodys[i] = body;
                     } else {
-                        throw new RuntimeException("未知的AbstractDataBodyId: " + dataPacket.getBodyId(i));
+                        return null;
                     }
                 }
             }
@@ -218,67 +120,13 @@ public class PacketCodec {
         while (dstBuffer.hasRemaining()) {
             socketChannel.write(dstBuffer);
         }
-        if (sendViewMap.get(dataPacket.getTaskId()) instanceof AbstractTransmitView transmitView) {
-            if (transmitView.trySubmit()) {
-                threadPool.submit(transmitView);
+        TaskWrap taskWrap = dataPacket.getTaskWrap();
+        for (AbstractDataBody<?> body : dataPacket.getBodys()) {
+            ProgressUpdater updater = NO_OP_UPDATER;
+            if (taskWrap != null && taskWrap.hasTransmitView() && taskWrap.getSendTransmitView(dataPacket.getPacketIndex()) instanceof AbstractTransmitView transmitView) {
+                updater = forTransmitView(transmitView);
             }
-            for (AbstractDataBody<?> body : dataPacket.getBodys()) {
-                transmitView.setInfo(dataPacket.getPacketIndex(), body.getSize(), body.getMetadata());
-                try {
-                    body.prepareEncode();
-                    transmitView.begin();
-                    if (body.getMetaLength() > 0) {
-                        dstBuffer = bufferManager.getDestBuffer(body.getMetaLength());
-                        dstBuffer.put(encryptCipher.update(body.getMetadata())).flip();
-                        while (dstBuffer.hasRemaining()) {
-                            socketChannel.write(dstBuffer);
-                        }
-                    }
-                    int bufferSize = (int) Math.min(body.getSize(), MAX_BUFFER_SIZE);
-                    srcBuffer = bufferManager.getSrcBuffer(bufferSize);
-                    dstBuffer = bufferManager.getDestBuffer(bufferSize);
-                    for (long residue = body.getSize(), handleNumber; residue > 0; residue -= handleNumber) {
-                        body.encode(srcBuffer.clear());
-                        handleNumber = encryptCipher.update(srcBuffer.flip(), dstBuffer.clear());
-                        dstBuffer.flip();
-                        while (dstBuffer.hasRemaining()) {
-                            socketChannel.write(dstBuffer);
-                        }
-                        transmitView.updateSize(handleNumber);
-                    }
-                    body.finishEncode();
-                } finally {
-                    body.release();
-                    transmitView.finish();
-                }
-            }
-        } else {
-            for (AbstractDataBody<?> body : dataPacket.getBodys()) {
-                try {
-                    body.prepareEncode();
-                    if (body.getMetaLength() > 0) {
-                        dstBuffer = bufferManager.getDestBuffer(body.getMetaLength());
-                        dstBuffer.put(encryptCipher.update(body.getMetadata())).flip();
-                        while (dstBuffer.hasRemaining()) {
-                            socketChannel.write(dstBuffer);
-                        }
-                    }
-                    int bufferSize = (int) Math.min(body.getSize(), MAX_BUFFER_SIZE);
-                    srcBuffer = bufferManager.getSrcBuffer(bufferSize);
-                    dstBuffer = bufferManager.getDestBuffer(bufferSize);
-                    for (long residue = body.getSize(), handleNumber; residue > 0; residue -= handleNumber) {
-                        body.encode(srcBuffer.clear());
-                        handleNumber = encryptCipher.update(srcBuffer.flip(), dstBuffer.clear());
-                        dstBuffer.flip();
-                        while (dstBuffer.hasRemaining()) {
-                            socketChannel.write(dstBuffer);
-                        }
-                    }
-                    body.finishEncode();
-                } finally {
-                    body.release();
-                }
-            }
+            encryptDataBody(body, socketChannel, bufferManager, encryptCipher, updater);
         }
         if (dataPacket.getTailLength() > 0) {
             dstBuffer = bufferManager.getSrcBuffer(dataPacket.getTailLength());
@@ -291,6 +139,78 @@ public class PacketCodec {
         dstBuffer.clear().put(encryptCipher.createTag()).flip();
         while (dstBuffer.hasRemaining()) {
             socketChannel.write(dstBuffer);
+        }
+    }
+    private AbstractDataBody<?> decodeDataBody(AbstractDataBody<?> body, DataPacket dataPacket, byte packetIndex, SocketChannel socketChannel, BufferManager bufferManager, ImtpsSecretKey.DecryptCipher decryptCipher, ProgressUpdater updater) throws Exception {
+        ByteBuffer srcBuffer, dstBuffer;
+        try {
+            int bodyMeatLength  = dataPacket.getBodyMeatLength(packetIndex);
+            if (bodyMeatLength > 0) {
+                srcBuffer = bufferManager.getSrcBuffer(bodyMeatLength);
+                while (srcBuffer.hasRemaining()) {
+                    if (socketChannel.read(srcBuffer) == -1) {
+                        return null;
+                    }
+                }
+                byte[] meat = new byte[bodyMeatLength];
+                srcBuffer.flip().get(meat);
+                body.setMetadata(decryptCipher.update(meat));
+            }
+            long bodySize = dataPacket.getBodySize(packetIndex);
+            updater.begin(bodySize, body.getMetadata());
+            body.prepareDecode(bodySize);
+            int bufferSize = (int) Math.min(bodySize, MAX_BUFFER_SIZE);
+            srcBuffer = bufferManager.getSrcBuffer(bufferSize);
+            dstBuffer = bufferManager.getDestBuffer(bufferSize);
+            for (long residue = bodySize, handleNumber; residue > 0; residue -= handleNumber) {
+                if (residue < srcBuffer.remaining()) {
+                    srcBuffer.limit((int) residue);
+                }
+                while (srcBuffer.hasRemaining()) {
+                    if (socketChannel.read(srcBuffer) == -1) {
+                        return null;
+                    }
+                }
+                handleNumber = decryptCipher.update(srcBuffer.flip(), dstBuffer.clear());
+                body.decode(dstBuffer.flip());
+                srcBuffer.clear();
+                updater.update(handleNumber);
+            }
+            body.finishDecode();
+            return body;
+        } finally {
+            body.release();
+            updater.finish();
+        }
+    }
+    private void encryptDataBody(AbstractDataBody<?> body, SocketChannel socketChannel, BufferManager bufferManager, ImtpsSecretKey.EncryptCipher encryptCipher, ProgressUpdater updater) throws Exception {
+        ByteBuffer srcBuffer, dstBuffer;
+        try {
+            updater.begin(body.getSize(), body.getMetadata());
+            body.prepareEncode();
+            if (body.getMetaLength() > 0) {
+                dstBuffer = bufferManager.getDestBuffer(body.getMetaLength());
+                dstBuffer.put(encryptCipher.update(body.getMetadata())).flip();
+                while (dstBuffer.hasRemaining()) {
+                    socketChannel.write(dstBuffer);
+                }
+            }
+            int bufferSize = (int) Math.min(body.getSize(), MAX_BUFFER_SIZE);
+            srcBuffer = bufferManager.getSrcBuffer(bufferSize);
+            dstBuffer = bufferManager.getDestBuffer(bufferSize);
+            for (long residue = body.getSize(), handleNumber; residue > 0; residue -= handleNumber) {
+                body.encode(srcBuffer.clear());
+                handleNumber = encryptCipher.update(srcBuffer.flip(), dstBuffer.clear());
+                dstBuffer.flip();
+                while (dstBuffer.hasRemaining()) {
+                    socketChannel.write(dstBuffer);
+                }
+                updater.update(handleNumber);
+            }
+            body.finishEncode();
+        } finally {
+            body.release();
+            updater.finish();
         }
     }
 
@@ -347,5 +267,34 @@ public class PacketCodec {
                 socketChannel.write(srcBuffer);
             }
         }
+    }
+
+    private interface ProgressUpdater {
+        void begin(long totalBytes, byte[] metadata);
+        void update(long handledBytes);
+        void finish();
+    }
+    private static final ProgressUpdater NO_OP_UPDATER = new ProgressUpdater() {
+        @Override public void begin(long totalBytes, byte[] metadata) {}
+        @Override public void update(long handledBytes) {}
+        @Override public void finish() {}
+    };
+    private ProgressUpdater forTransmitView(AbstractTransmitView transmitView) {
+        return new ProgressUpdater() {
+            @Override
+            public void begin(long totalBytes, byte[] metadata) {
+                transmitView.setInfo(totalBytes, metadata);
+                transmitView.begin();
+                threadPool.submit(transmitView);
+            }
+            @Override
+            public void update(long handledBytes) {
+                transmitView.updateSize(handledBytes);
+            }
+            @Override
+            public void finish() {
+                transmitView.finish();
+            }
+        };
     }
 }

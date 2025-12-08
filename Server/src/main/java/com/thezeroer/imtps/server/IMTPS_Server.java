@@ -8,6 +8,7 @@ import com.thezeroer.imtps.server.datapacket.databody.FileDataBody;
 import com.thezeroer.imtps.server.datapacket.databody.ObjectDataBody;
 import com.thezeroer.imtps.server.datapacket.databody.TextDataBody;
 import com.thezeroer.imtps.server.process.HandlerRegistry;
+import com.thezeroer.imtps.server.process.TaskWrap;
 import com.thezeroer.imtps.server.process.handler.ImtpsHandler;
 import com.thezeroer.imtps.server.process.task.AbstractTask;
 import com.thezeroer.imtps.server.process.DataPacketDispatcher;
@@ -174,10 +175,25 @@ public class IMTPS_Server {
      * 提交任务
      *
      * @param task 任务
+     * @param sessionName 会话名称
      */
-    public boolean submitTask(AbstractTask task, String sessionName) {
+    public boolean submitTask(AbstractTask<?> task, String sessionName) {
         if (task != null && sessionManager.getNameToSessionHashMap().get(sessionName) instanceof ImtpsSession imtpsSession) {
-            dataPacketDispatcher.submitTask(task.setImtpsSession(imtpsSession));
+            dataPacketDispatcher.submitTask(new TaskWrap(task).setImtpsSession(imtpsSession));
+            return true;
+        }
+        return false;
+    }
+    /**
+     * 提交任务
+     *
+     * @param taskWrap 任务包装
+     * @param sessionName 会话名称
+     * @return boolean
+     */
+    public boolean submitTask(TaskWrap taskWrap, String sessionName) {
+        if (taskWrap != null && sessionManager.getNameToSessionHashMap().get(sessionName) instanceof ImtpsSession imtpsSession) {
+            dataPacketDispatcher.submitTask(taskWrap.setImtpsSession(imtpsSession));
             return true;
         }
         return false;

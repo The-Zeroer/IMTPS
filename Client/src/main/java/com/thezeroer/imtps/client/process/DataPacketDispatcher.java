@@ -75,9 +75,8 @@ public class DataPacketDispatcher {
            }
         });
     }
-    public void submitTask(AbstractTask<?> task) {
-        TaskWrap taskWrap = new TaskWrap(task);
-        switch (task.getPattern()) {
+    public void submitTask(TaskWrap taskWrap) {
+        switch (taskWrap.getTask().getPattern()) {
             case AbstractTask.PATTERN_DEFAULT -> threadPool.submit(() -> executeTaskRequest(taskWrap));
             case AbstractTask.PATTERN_QUEUE -> {
                 if (taskHashMap.isEmpty()) {
@@ -90,7 +89,7 @@ public class DataPacketDispatcher {
                 executeTaskRequest(taskWrap);
                 synchronized (taskWrap) {
                     try {
-                        taskWrap.wait(task.getWaitingTime());
+                        taskWrap.wait();
                     } catch (InterruptedException ignored) {}
                 }
             }
@@ -111,71 +110,34 @@ public class DataPacketDispatcher {
         try {
             if (taskWrap.taskRequest() instanceof List<DataPacket> dataPackets && !dataPackets.isEmpty()) {
                 taskHashMap.put(taskWrap.getTask().getTaskId(), taskWrap);
+                if (taskWrap.hasTransmitView()) {
+                    packetCodec.addTaskWrap(taskWrap);
+                }
                 for (DataPacket dataPacket : dataPackets) {
                     sessionManager.putDataPacket(dataPacket.setTaskWrap(taskWrap));
                 }
             }
-//            taskHashMap.put(task.getTaskId(), task);
-//            if (task.getSendView() instanceof AbstractTransmitView sendView) {
-//                packetCodec.addSendView(task.getTaskId(), sendView);
-//            }
-//            if (task.getReceiveView() instanceof AbstractTransmitView receiveView) {
-//                packetCodec.addReceiveView(task.getTaskId(), receiveView);
-//            }
-//            for (DataPacket dataPacket : task.getRequestDataPackets()) {
-//                sessionManager.putDataPacket(dataPacket.setTask(task));
-//            }
         } catch (Exception e) {
             log.error("TaskRequest[{}]出现未捕获的异常", taskWrap.getTask().getTaskId(), e);
             taskWrap.getTask().done(false);
-//            if (task.getSendView() != null) {
-//                packetCodec.removeSendView(task.getTaskId());
-//            }
-//            if (task.getReceiveView() != null) {
-//                packetCodec.removeReceiveView(task.getTaskId());
-//            }
         }
     }
     private void executeTaskResponse(TaskWrap taskWrap, DataPacket dataPacket) {
         try {
             if (taskWrap.taskResponse(dataPacket)) {
                 taskHashMap.remove(taskWrap.getTask().getTaskId());
-                if (taskWrap.getTask().getPattern() == AbstractTask.PATTERN_DEFAULT) {
-                    taskWrap.notifyAll();
+                if (taskWrap.hasTransmitView()) {
+                    packetCodec.removeTaskWrap(taskWrap);
                 }
             }
-//            if (task.isLive()) {
-//                synchronized (task) {
-//                    if (task.isLive()) {
-//                        boolean finished;
-//                        if (dataPacket == null) {
-//                            finished = true;
-//                        } else {
-//                            finished = task.putResponseDataPacket(dataPacket);
-//                        }
-//                        if (finished) {
-//                            taskHashMap.remove(task.getTaskId());
-//                            if (task.getSendView() instanceof AbstractTransmitView transmitView) {
-//                                packetCodec.removeSendView(task.getTaskId());
-//                                transmitView.close();
-//                            }
-//                            if (task.getReceiveView() instanceof AbstractTransmitView transmitView) {
-//                                packetCodec.removeReceiveView(task.getTaskId());
-//                                transmitView.close();
-//                            }
-//                            task.setLive(false);
-//                            task.response();
-//                            task.finish(true);
-//                            if (task.getPattern() == ImtpsTask.PATTERN_WAIT) {
-//                                task.notifyAll();
-//                            }
-//                        }
-//                    }
-//                }
-//            }
         } catch (Exception e) {
             log.error("TaskResponse[{}]出现未捕获的异常", taskWrap.getTask().getTaskId(), e);
             taskWrap.getTask().done(false);
+            taskHashMap.remove(taskWrap.getTask().getTaskId());
+            packetCodec.removeTaskWrap(taskWrap);
+            if (taskWrap.getTask().getPattern() == AbstractTask.PATTERN_DEFAULT) {
+                this.notifyAll();
+            }
         }
     }
 

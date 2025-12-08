@@ -1,16 +1,9 @@
 package com.thezeroer.imtps.server.process.task;
 
-import com.thezeroer.imtps.server.datapacket.DataPacket;
-import com.thezeroer.imtps.server.process.TaskContext;
 import com.thezeroer.imtps.server.util.Tool;
-import com.thezeroer.imtps.server.view.AbstractTransmitView;
-import com.thezeroer.imtps.server.session.ImtpsSession;
 
-import java.nio.charset.StandardCharsets;
 import java.security.NoSuchAlgorithmException;
-import java.util.Collection;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 抽象任务
@@ -19,7 +12,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * @since 2025/09/24
  * @version 1.0.0
  */
-public abstract class AbstractTask {
+public abstract sealed class AbstractTask<T> permits ImtpsTask, ImtpsTaskList, ImtpsTaskMap, ImtpsTaskSet {
     /** 默认模式<br>提交任务后立即返回 */
     public static final byte PATTERN_DEFAULT = 0;
     /** 队列模式<br>如果此时没有等待响应的任务，提交此任务后立即返回<br>否则加入请求队列后立即返回，等待响应后请求 */
@@ -28,35 +21,20 @@ public abstract class AbstractTask {
     public static final byte PATTERN_WAIT = 2;
 
     private final String taskId;
-    private long waitingTime, expirationTime;
+    private long waitingTime;
     private byte pattern = PATTERN_DEFAULT;
-    private final AtomicBoolean live;
-
-    private AbstractTransmitView sendView, receiveView;
-    private ImtpsSession imtpsSession;
 
     public AbstractTask() {
         this(createTaskId());
     }
     public AbstractTask(String taskId) {
-        if (taskId == null) {
-            taskId = createTaskId();
-        }
-        if (taskId.getBytes(StandardCharsets.UTF_8).length != 32) {
-            throw new IllegalArgumentException("Task ID must be 32 bytes");
-        }
         this.taskId = taskId;
         waitingTime = 10000L;
-        live = new AtomicBoolean(true);
     }
 
-    public abstract boolean request() throws Exception;
-    public abstract void response() throws Exception;
-    public void finish(boolean flag) {}
-
-    public abstract void putRequestDataPacket(DataPacket dataPacket);
-    public abstract DataPacket getResponseDataPacket();
-    public abstract Collection<DataPacket> getResponseDataPackets();
+    public abstract T request() throws Exception;
+    public abstract void response(T t) throws Exception;
+    public void done(boolean normal) {}
 
     /**
      * 设置等待时间，默认10秒
@@ -64,7 +42,7 @@ public abstract class AbstractTask {
      * @param seconds 秒
      * @return {@link ImtpsTask }
      */
-    public AbstractTask setWaitingTime(int seconds) {
+    public AbstractTask<T> setWaitingTime(int seconds) {
         this.waitingTime = seconds * 1000L;
         return this;
     }
@@ -74,75 +52,24 @@ public abstract class AbstractTask {
      * @param pattern 模式
      * @return {@link ImtpsTask }
      */
-    public AbstractTask setPattern(byte pattern) {
+    public AbstractTask<T> setPattern(byte pattern) {
         this.pattern = pattern;
         return this;
     }
 
-    /**
-     * 设置发送视图
-     *
-     * @param transmitView 传输视图 {@link AbstractTransmitView}
-     * @return {@link ImtpsTask }
-     */
-    public AbstractTask setSendView(AbstractTransmitView transmitView) {
-        sendView = transmitView;
-        return this;
-    }
-    /**
-     * 设置接收视图
-     *
-     * @param transmitView 传输视图 {@link AbstractTransmitView}
-     * @return {@link ImtpsTask }
-     */
-    public AbstractTask setReceiveView(AbstractTransmitView transmitView) {
-        receiveView = transmitView;
-        return this;
-    }
-    public AbstractTransmitView getSendView() {
-        return sendView;
-    }
-    public AbstractTransmitView getReceiveView() {
-        return receiveView;
-    }
-
-    public abstract Collection<DataPacket> getRequestDataPackets();
-    public abstract boolean putResponseDataPacket(DataPacket dataPacket);
-
-    public AbstractTask setImtpsSession(ImtpsSession imtpsSession) {
-        this.imtpsSession = imtpsSession;
-        return this;
-    }
-    public ImtpsSession getImtpsSession() {
-        return imtpsSession;
-    }
-
-    public byte getPattern() {
+    public final byte getPattern() {
         return pattern;
     }
-    public String getTaskId() {
+    public final String getTaskId() {
         return taskId;
     }
-    public long getWaitingTime() {
+    public final long getWaitingTime() {
         return waitingTime;
-    }
-    public long getExpirationTime() {
-        return expirationTime;
-    }
-    public void updateExpirationTime() {
-        expirationTime = System.currentTimeMillis() + waitingTime;
-    }
-
-    public boolean isLive() {
-        return live.get();
-    }
-    public void setLive(boolean live) {
-        this.live.set(live);
     }
 
     public static String createTaskId() {
         try {
-            return Tool.getStringHashValue(System.currentTimeMillis() + UUID.randomUUID().toString(), "MD5");
+            return Tool.getStringHashValue(UUID.randomUUID().toString(), "MD5");
         } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException(e);
         }

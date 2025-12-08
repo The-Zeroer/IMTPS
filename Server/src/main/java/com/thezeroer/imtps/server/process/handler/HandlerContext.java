@@ -1,4 +1,4 @@
-package com.thezeroer.imtps.server.process;
+package com.thezeroer.imtps.server.process.handler;
 
 import com.thezeroer.imtps.server.datapacket.DataPacket;
 import com.thezeroer.imtps.server.session.ImtpsSession;

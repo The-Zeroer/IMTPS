@@ -1,6 +1,7 @@
 package com.thezeroer.imtps.server.datapacket;
 
 import com.thezeroer.imtps.server.datapacket.databody.AbstractDataBody;
+import com.thezeroer.imtps.server.process.TaskWrap;
 import com.thezeroer.imtps.server.process.task.AbstractTask;
 
 import java.nio.ByteBuffer;
@@ -74,7 +75,7 @@ public class DataPacket implements Cloneable{
     private Header header;
     private final List<AbstractDataBody<?>> bodys;
     private byte[] tail;
-    private AbstractTask task;
+    private TaskWrap taskWrap;
 
     private DataPacket() {
         header = new Header();
@@ -115,10 +116,6 @@ public class DataPacket implements Cloneable{
         return this;
     }
 
-    public DataPacket setTask(AbstractTask task) {
-        this.task = task;
-        return setTaskId(task.getTaskId());
-    }
     public DataPacket setTaskId(String taskId) {
         byte[] taskIdBytes = taskId.getBytes(StandardCharsets.UTF_8);
         if (taskIdBytes.length != Header.TASK_ID_LENGTH) {
@@ -197,9 +194,6 @@ public class DataPacket implements Cloneable{
     public byte getPacketIndex() {
         return header.packetIndex;
     }
-    public AbstractTask getTask() {
-        return task;
-    }
     public AbstractDataBody.TYPE getDataBodyType() {
         if (bodys.isEmpty()) {
             return AbstractDataBody.TYPE.Basic;
@@ -214,6 +208,14 @@ public class DataPacket implements Cloneable{
             }
             return type;
         }
+    }
+
+    public DataPacket setTaskWrap(TaskWrap taskWrap) {
+        this.taskWrap = taskWrap;
+        return setTaskId(taskWrap.getTask().getTaskId());
+    }
+    public TaskWrap getTaskWrap() {
+        return taskWrap;
     }
 
     protected ByteBuffer headerToBuffer(ByteBuffer output) {

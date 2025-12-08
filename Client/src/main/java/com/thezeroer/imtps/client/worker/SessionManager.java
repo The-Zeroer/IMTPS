@@ -218,7 +218,7 @@ public class SessionManager extends Thread {
                     log.error("SessionManager-HandleControlPacket AriseError", e);
                 }
             } else {
-                log.trace("接收DataPacket[{}]", packet);
+                log.trace("接收DataPacket{}", packet);
                 dataPacketDispatcher.handleDataPacket((DataPacket) packet);
             }
         });
@@ -238,6 +238,7 @@ public class SessionManager extends Thread {
                         if (controlPacketQueue.poll() instanceof ControlPacket controlPacket) {
                             imtpsSession.updateLastActivityTime();
                             packetCodec.writeControlPacket(selectionKey, imtpsSession.getImtpsSecretKey(), controlPacket);
+                            log.trace("发送ControlPacket[{}]", controlPacket);
                         }
                     }
                 } else {
@@ -246,6 +247,7 @@ public class SessionManager extends Thread {
                         if (dataPacketQueue.poll() instanceof DataPacket dataPacket) {
                             packetCodec.writeDataPacket(selectionKey, imtpsSession.getImtpsSecretKey(), dataPacket);
                             dataPacketDispatcher.submitTaskToTimer(dataPacket.getTaskWrap());
+                            log.trace("发送DataPacket{}", dataPacket);
                         }
                     }
                 }

@@ -428,7 +428,7 @@ public class SessionManager extends Thread {
                         selector.wakeup();
                     }
                 }
-                log.trace("接收DataPacket[{}]", dataPacket);
+                log.trace("接收DataPacket[{}-{}]{}", imtpsSession.getSessionName(), imtpsSession.getRemoteAddress(), dataPacket);
                 dataPacketDispatcher.handleDataPacket(dataPacket, (ImtpsSession) selectionKey.attachment());
             });
         }
@@ -447,9 +447,9 @@ public class SessionManager extends Thread {
                             if (dataPacket.getTaskId().isEmpty()) {
                                 dataPacket.setTaskId(ImtpsTask.createTaskId());
                             }
-                            log.trace("发送DataPacket[{}]", dataPacket);
+                            log.trace("发送DataPacket[{}-{}]{}", imtpsSession.getSessionName(), imtpsSession.getRemoteAddress(), dataPacket);
                             packetCodec.writeDataPacket(selectionKey, imtpsSession.getImtpsSecretKey(), dataPacket);
-                            dataPacketDispatcher.submitTaskToTimer(dataPacket.getTask());
+                            dataPacketDispatcher.submitTaskToTimer(dataPacket.getTaskWrap());
                         }
                     }
                 } catch (Exception e) {

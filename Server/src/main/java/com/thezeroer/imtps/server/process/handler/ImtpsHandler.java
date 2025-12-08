@@ -1,7 +1,6 @@
 package com.thezeroer.imtps.server.process.handler;
 
 import com.thezeroer.imtps.server.datapacket.DataPacket;
-import com.thezeroer.imtps.server.process.HandlerContext;
 
 /**
  * IMTPS 处理程序

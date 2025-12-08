@@ -1,12 +1,11 @@
 package com.thezeroer.imtps.client.process;
 
 import com.thezeroer.imtps.client.datapacket.DataPacket;
-import com.thezeroer.imtps.client.process.task.AbstractTask;
-import com.thezeroer.imtps.client.process.task.ImtpsTask;
-import com.thezeroer.imtps.client.process.task.ImtpsTaskMap;
-import com.thezeroer.imtps.client.process.task.ImtpsTaskSet;
+import com.thezeroer.imtps.client.process.task.*;
+import com.thezeroer.imtps.client.view.AbstractTransmitView;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 任务包装
@@ -15,13 +14,14 @@ import java.util.*;
  * @since 2025/12/07
  * @version 1.0.0
  */
-public class TaskWrap {
+public final class TaskWrap {
     private final AbstractTask<?> abstractTask;
     private final RequestFunction requestFunction;
     private final ResponseFunction responseFunction;
     private int requestCount, responseCount;
     private long expirationTime;
     private boolean done;
+    private Map<Byte, AbstractTransmitView> sendViewMap, receiveViewMap;
 
     public TaskWrap(AbstractTask<?> abstractTask) {
         this.abstractTask = abstractTask;
@@ -40,25 +40,27 @@ public class TaskWrap {
                     return true;
                 };
             }
-            case ImtpsTaskSet taskSet -> {
-                Set<DataPacket> responseSet = new LinkedHashSet<>(8);
+            case ImtpsTaskList taskList -> {
+                AtomicReference<List<DataPacket>> responseList = new AtomicReference<>();
                 requestFunction = () -> {
-                    if (taskSet.request() instanceof Set<DataPacket> dataPacketSet) {
-                        return new ArrayList<>(dataPacketSet);
-                    } else {
-                        return null;
+                    List<DataPacket> packets = taskList.request();
+                    for (int i = 0; i < packets.size(); i++) {
+                        packets.get(i).setPacketIndex((byte) i);
                     }
+                    return packets;
                 };
                 responseFunction = (dataPacket) -> {
+                    if (responseList.get() == null) {
+                        responseList.set(new ArrayList<>(requestCount));
+                    }
                     if (dataPacket == null) {
-                        taskSet.response(responseSet);
-                        return true;
+                         taskList.response(responseList.get());
+                         return true;
                     }
-                    if (responseSet.add(dataPacket)) {
-                        responseCount++;
-                    }
+                    responseList.get().add(dataPacket.getPacketIndex(), dataPacket);
+                    responseCount++;
                     if (responseCount >= requestCount) {
-                        taskSet.response(responseSet);
+                        taskList.response(responseList.get());
                         return true;
                     } else {
                         return false;
@@ -90,14 +92,63 @@ public class TaskWrap {
                     }
                 };
             }
+            case ImtpsTaskSet taskSet -> {
+                Set<DataPacket> responseSet = new LinkedHashSet<>(8);
+                requestFunction = () -> {
+                    if (taskSet.request() instanceof Set<DataPacket> dataPacketSet) {
+                        return new ArrayList<>(dataPacketSet);
+                    } else {
+                        return null;
+                    }
+                };
+                responseFunction = (dataPacket) -> {
+                    if (dataPacket == null) {
+                        taskSet.response(responseSet);
+                        return true;
+                    }
+                    if (responseSet.add(dataPacket)) {
+                        responseCount++;
+                    }
+                    if (responseCount >= requestCount) {
+                        taskSet.response(responseSet);
+                        return true;
+                    } else {
+                        return false;
+                    }
+                };
+            }
             case null, default -> {
                 throw new IllegalArgumentException("Unsupported task type: " + abstractTask);
             }
         }
     }
 
+    public TaskWrap setSendTransmitView(byte packetIndex, AbstractTransmitView transmitView) {
+        if (sendViewMap == null) {
+            sendViewMap = new LinkedHashMap<>();
+        }
+        sendViewMap.put(packetIndex, transmitView);
+        return this;
+    }
+    public TaskWrap setReceiveTransmitView(byte packetIndex, AbstractTransmitView transmitView) {
+        if (receiveViewMap == null) {
+            receiveViewMap = new LinkedHashMap<>();
+        }
+        receiveViewMap.put(packetIndex, transmitView);
+        return this;
+    }
+
     public AbstractTask<?> getTask() {
         return abstractTask;
+    }
+    public AbstractTransmitView getSendTransmitView(byte packetIndex) {
+        return sendViewMap.get(packetIndex);
+    }
+    public AbstractTransmitView getReceiveTransmitView(byte packetIndex) {
+        return receiveViewMap.get(packetIndex);
+    }
+    public boolean hasTransmitView() {
+        return sendViewMap != null || receiveViewMap != null;
     }
 
     List<DataPacket> taskRequest() throws Exception {
@@ -117,6 +168,9 @@ public class TaskWrap {
         done = responseFunction.accept(dataPacket);
         if (done) {
             abstractTask.done(true);
+            if (abstractTask.getPattern() == AbstractTask.PATTERN_DEFAULT) {
+                this.notifyAll();
+            }
         }
         return done;
     }

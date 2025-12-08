@@ -2,6 +2,7 @@ package com.thezeroer.imtps.server.process;
 
 import com.thezeroer.imtps.server.datapacket.DataPacket;
 import com.thezeroer.imtps.server.datapacket.PacketCodec;
+import com.thezeroer.imtps.server.process.handler.HandlerContext;
 import com.thezeroer.imtps.server.process.handler.ImtpsHandler;
 import com.thezeroer.imtps.server.process.task.AbstractTask;
 import com.thezeroer.imtps.server.process.task.ImtpsTask;
@@ -12,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Comparator;
+import java.util.List;
 import java.util.PriorityQueue;
 import java.util.concurrent.*;
 
@@ -25,8 +27,8 @@ import java.util.concurrent.*;
 public class DataPacketDispatcher {
     private static final Logger log = LoggerFactory.getLogger(DataPacketDispatcher.class);
     private final HandlerRegistry<ImtpsHandler> handlerRegistry;
-    private final ConcurrentLinkedQueue<AbstractTask> taskQueue;
-    private final ConcurrentHashMap<String, AbstractTask> taskHashMap;
+    private final ConcurrentLinkedQueue<TaskWrap> taskQueue;
+    private final ConcurrentHashMap<String, TaskWrap> taskHashMap;
     private final TaskTimer taskTimer;
     private ExecutorService threadPool;
 
@@ -59,10 +61,10 @@ public class DataPacketDispatcher {
     }
 
     public void handleDataPacket(DataPacket dataPacket, ImtpsSession imtpsSession) {
-        AbstractTask mapTask = taskHashMap.get(dataPacket.getTaskId());
+        TaskWrap mapTask = taskHashMap.get(dataPacket.getTaskId());
         if (mapTask != null) {
             threadPool.submit(() -> executeTaskResponse(mapTask, dataPacket));
-            if (taskQueue.poll() instanceof AbstractTask queuedTask) {
+            if (taskQueue.poll() instanceof TaskWrap queuedTask) {
                 threadPool.submit(() -> executeTaskRequest(queuedTask));
             }
             return;
@@ -92,98 +94,72 @@ public class DataPacketDispatcher {
            }
         });
     }
-    public void submitTask(AbstractTask task) {
-        switch (task.getPattern()) {
-            case AbstractTask.PATTERN_DEFAULT -> threadPool.submit(() -> executeTaskRequest(task));
+    public void submitTask(TaskWrap taskWrap) {
+        switch (taskWrap.getTask().getPattern()) {
+            case AbstractTask.PATTERN_DEFAULT -> threadPool.submit(() -> executeTaskRequest(taskWrap));
             case AbstractTask.PATTERN_QUEUE -> {
                 if (taskHashMap.isEmpty()) {
-                    threadPool.submit(() -> executeTaskRequest(task));
+                    threadPool.submit(() -> executeTaskRequest(taskWrap));
                 } else {
-                    taskQueue.add(task);
+                    taskQueue.add(taskWrap);
                 }
             }
             case AbstractTask.PATTERN_WAIT -> {
-                executeTaskRequest(task);
-                synchronized (task) {
+                executeTaskRequest(taskWrap);
+                synchronized (taskWrap) {
                     try {
-                        task.wait(task.getWaitingTime());
+                        taskWrap.wait();
                     } catch (InterruptedException ignored) {}
                 }
             }
         }
     }
     public void removeTask(String taskId) {
-        if (taskHashMap.remove(taskId) instanceof AbstractTask task && task.getPattern() == AbstractTask.PATTERN_QUEUE) {
-            taskQueue.remove(task);
+        if (taskHashMap.remove(taskId) instanceof TaskWrap taskWrap && taskWrap.getTask().getPattern() == AbstractTask.PATTERN_QUEUE) {
+            taskQueue.remove(taskWrap);
         }
     }
-    public void submitTaskToTimer(AbstractTask task) {
-        if (task != null) {
-            taskTimer.submit(task);
+    public void submitTaskToTimer(TaskWrap taskWrap) {
+        if (taskWrap != null) {
+            taskTimer.submit(taskWrap);
         }
     }
 
-    private void executeTaskRequest(AbstractTask task) {
+    private void executeTaskRequest(TaskWrap taskWrap) {
         try {
-            if (!task.request()) {
-                task.finish(false);
-                return;
-            }
-            taskHashMap.put(task.getTaskId(), task);
-            if (task.getSendView() instanceof AbstractTransmitView sendView) {
-                packetCodec.addSendView(task.getTaskId(), sendView);
-            }
-            if (task.getReceiveView() instanceof AbstractTransmitView receiveView) {
-                packetCodec.addReceiveView(task.getTaskId(), receiveView);
-            }
-            for (DataPacket dataPacket : task.getRequestDataPackets()) {
-                sessionManager.putDataPacket(task.getImtpsSession(), dataPacket.setTask(task));
-            }
-        } catch (Exception e) {
-            log.error("TaskRequest[{}]出现未捕获的异常", task.getTaskId(), e);
-            task.finish(false);
-            if (task.getSendView() != null) {
-                packetCodec.removeSendView(task.getTaskId());
-            }
-            if (task.getReceiveView() != null) {
-                packetCodec.removeReceiveView(task.getTaskId());
-            }
-        }
-    }
-    private void executeTaskResponse(AbstractTask task, DataPacket dataPacket) {
-        try {
-            if (task.isLive()) {
-                synchronized (task) {
-                    if (task.isLive()) {
-                        boolean finished;
-                        if (dataPacket == null) {
-                            finished = true;
-                        } else {
-                            finished = task.putResponseDataPacket(dataPacket);
-                        }
-                        if (finished) {
-                            taskHashMap.remove(task.getTaskId());
-                            if (task.getSendView() instanceof AbstractTransmitView transmitView) {
-                                packetCodec.removeSendView(task.getTaskId());
-                                transmitView.close();
-                            }
-                            if (task.getReceiveView() instanceof AbstractTransmitView transmitView) {
-                                packetCodec.removeReceiveView(task.getTaskId());
-                                transmitView.close();
-                            }
-                            task.setLive(false);
-                            task.response();
-                            task.finish(true);
-                            if (task.getPattern() == ImtpsTask.PATTERN_WAIT) {
-                                task.notifyAll();
-                            }
-                        }
-                    }
+            if (taskWrap.taskRequest() instanceof List<DataPacket> dataPackets && !dataPackets.isEmpty()) {
+                taskHashMap.put(taskWrap.getTask().getTaskId(), taskWrap);
+                if (taskWrap.hasTransmitView()) {
+                    packetCodec.addTaskWrap(taskWrap);
+                }
+                for (DataPacket dataPacket : dataPackets) {
+                    sessionManager.putDataPacket(taskWrap.getImtpsSession(), dataPacket.setTaskWrap(taskWrap));
                 }
             }
         } catch (Exception e) {
-            log.error("TaskResponse[{}]出现未捕获的异常", task.getTaskId(), e);
-            task.finish(false);
+            log.error("TaskRequest[{}]出现未捕获的异常", taskWrap.getTask().getTaskId(), e);
+            taskWrap.getTask().done(false);
+        }
+    }
+    private void executeTaskResponse(TaskWrap taskWrap, DataPacket dataPacket) {
+        try {
+            if (taskWrap.taskResponse(dataPacket)) {
+                taskHashMap.remove(taskWrap.getTask().getTaskId());
+                if (taskWrap.hasTransmitView()) {
+                    packetCodec.removeTaskWrap(taskWrap);
+                }
+                if (taskWrap.getTask().getPattern() == AbstractTask.PATTERN_DEFAULT) {
+                    taskWrap.notifyAll();
+                }
+            }
+        } catch (Exception e) {
+            log.error("TaskResponse[{}]出现未捕获的异常", taskWrap.getTask().getTaskId(), e);
+            taskWrap.getTask().done(false);
+            taskHashMap.remove(taskWrap.getTask().getTaskId());
+            packetCodec.removeTaskWrap(taskWrap);
+            if (taskWrap.getTask().getPattern() == AbstractTask.PATTERN_DEFAULT) {
+                this.notifyAll();
+            }
         }
     }
 
@@ -195,21 +171,21 @@ public class DataPacketDispatcher {
         packetCodec.setThreadPool(threadPool);
     }
 
-    class TaskTimer extends Thread{
-        private final PriorityQueue<AbstractTask> WaitingQueue;
+    class TaskTimer extends Thread {
+        private final PriorityQueue<TaskWrap> WaitingQueue;
         private final Object taskTimerLock = new Object();
 
         public TaskTimer () {
-            WaitingQueue = new PriorityQueue<>(Comparator.comparingLong(AbstractTask::getExpirationTime));
+            WaitingQueue = new PriorityQueue<>(Comparator.comparingLong(TaskWrap::getExpirationTime));
             setDaemon(true);
             start();
         }
 
-        public synchronized void submit(AbstractTask task) {
-            task.updateExpirationTime();
-            WaitingQueue.add(task);
-            AbstractTask oldImtpsTask = WaitingQueue.peek();
-            if (task.equals(oldImtpsTask) || oldImtpsTask != null && task.getExpirationTime() < oldImtpsTask.getExpirationTime()) {
+        public synchronized void submit(TaskWrap taskWrap) {
+            taskWrap.updateExpirationTime();
+            WaitingQueue.add(taskWrap);
+            TaskWrap oldTaskWrap = WaitingQueue.peek();
+            if (taskWrap.equals(oldTaskWrap) || oldTaskWrap != null && taskWrap.getExpirationTime() < oldTaskWrap.getExpirationTime()) {
                 synchronized (taskTimerLock) {
                     taskTimerLock.notify();
                 }
@@ -222,12 +198,12 @@ public class DataPacketDispatcher {
                 while (!WaitingQueue.isEmpty()){
                     synchronized(taskTimerLock){
                         try {
-                            if (WaitingQueue.poll() instanceof AbstractTask task) {
-                                long waitTime = task.getExpirationTime() - System.currentTimeMillis();
+                            if (WaitingQueue.poll() instanceof TaskWrap taskWrap) {
+                                long waitTime = taskWrap.getExpirationTime() - System.currentTimeMillis();
                                 if (waitTime > 0) {
                                     taskTimerLock.wait(waitTime);
                                 }
-                                threadPool.submit(() -> executeTaskResponse(task, null));
+                                threadPool.submit(() -> executeTaskResponse(taskWrap, null));
                             }
                         } catch (InterruptedException ignored) {}
                     }

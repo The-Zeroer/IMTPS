@@ -9,6 +9,7 @@ import com.thezeroer.imtps.client.datapacket.databody.ObjectDataBody;
 import com.thezeroer.imtps.client.datapacket.databody.TextDataBody;
 import com.thezeroer.imtps.client.event.ImtpsEventCatch;
 import com.thezeroer.imtps.client.process.HandlerRegistry;
+import com.thezeroer.imtps.client.process.TaskWrap;
 import com.thezeroer.imtps.client.process.handler.ImtpsHandler;
 import com.thezeroer.imtps.client.process.task.AbstractTask;
 import com.thezeroer.imtps.client.process.DataPacketDispatcher;
@@ -112,7 +113,17 @@ public class IMTPS_Client {
      */
     public void submitTask(AbstractTask<?> task) {
         if (task != null) {
-            dataPacketDispatcher.submitTask(task);
+            dataPacketDispatcher.submitTask(new TaskWrap(task));
+        }
+    }
+    /**
+     * 提交任务
+     *
+     * @param taskWrap 任务包装
+     */
+    public void submitTask(TaskWrap taskWrap) {
+        if (taskWrap != null) {
+            dataPacketDispatcher.submitTask(taskWrap);
         }
     }
     /**

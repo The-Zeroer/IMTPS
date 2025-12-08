@@ -12,7 +12,7 @@ import java.util.UUID;
  * @since 2025/09/24
  * @version 1.0.0
  */
-public abstract sealed class AbstractTask<T> permits ImtpsTask, ImtpsTaskMap, ImtpsTaskSet {
+public abstract sealed class AbstractTask<T> permits ImtpsTask, ImtpsTaskList, ImtpsTaskMap, ImtpsTaskSet {
     /** 默认模式<br>提交任务后立即返回 */
     public static final byte PATTERN_DEFAULT = 0;
     /** 队列模式<br>如果此时没有等待响应的任务，提交此任务后立即返回<br>否则加入请求队列后立即返回，等待响应后请求 */
