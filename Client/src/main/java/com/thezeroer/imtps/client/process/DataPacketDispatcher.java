@@ -62,9 +62,9 @@ public class DataPacketDispatcher {
             }
             return;
         }
-        ImtpsHandler handler = handlerRegistry.match(dataPacket.getPaths());
+        ImtpsHandler handler = handlerRegistry.match(dataPacket.getPath());
         if (handler == null) {
-            log.warn("ImtpHandler{}缺失", dataPacket.getPaths());
+            log.warn("ImtpHandler{}缺失", dataPacket.getPath());
             return;
         }
         threadPool.submit(() -> {

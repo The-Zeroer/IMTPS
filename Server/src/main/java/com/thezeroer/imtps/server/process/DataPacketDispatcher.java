@@ -5,9 +5,7 @@ import com.thezeroer.imtps.server.datapacket.PacketCodec;
 import com.thezeroer.imtps.server.process.handler.HandlerContext;
 import com.thezeroer.imtps.server.process.handler.ImtpsHandler;
 import com.thezeroer.imtps.server.process.task.AbstractTask;
-import com.thezeroer.imtps.server.process.task.ImtpsTask;
 import com.thezeroer.imtps.server.session.ImtpsSession;
-import com.thezeroer.imtps.server.view.AbstractTransmitView;
 import com.thezeroer.imtps.server.worker.SessionManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -69,9 +67,9 @@ public class DataPacketDispatcher {
             }
             return;
         }
-        ImtpsHandler handler = handlerRegistry.match(dataPacket.getPaths());
+        ImtpsHandler handler = handlerRegistry.match(dataPacket.getPath());
         if (handler == null) {
-            log.warn("ImtpHandler{}缺失", dataPacket.getPaths());
+            log.warn("ImtpHandler{}缺失", dataPacket.getPath());
             sessionManager.putDataPacket(imtpsSession, DataPacket.build(DataPacket.WAY.SERVER_NULL));
             return;
         }
@@ -89,7 +87,7 @@ public class DataPacketDispatcher {
            try {
                handler.execute(new HandlerContext(sessionManager, imtpsSession, dataPacket));
            } catch (Exception e) {
-                log.error("ImtpHandler[{}]出现未捕获的异常", handler.getName(), e);
+               log.error("ImtpHandler[{}]出现未捕获的异常", handler.getName(), e);
                sessionManager.putDataPacket(imtpsSession, DataPacket.build(DataPacket.WAY.SERVER_ERROR));
            }
         });

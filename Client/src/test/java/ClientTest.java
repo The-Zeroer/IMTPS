@@ -13,6 +13,9 @@ public class ClientTest {
         imtpsClient.startRunning();
         imtpsClient.linkServer("127.0.0.1", 10086);
 //        imtpsClient.linkServer("frp-six.com", 10754);
+        System.out.println("1");
+        System.out.println("2");
+
         imtpsClient.submitTask(new TaskWrap(new ImtpsTask() {
             @Override
             public DataPacket request() throws Exception {
