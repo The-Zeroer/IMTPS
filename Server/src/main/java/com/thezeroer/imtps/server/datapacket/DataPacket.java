@@ -19,31 +19,26 @@ import java.util.List;
 public class DataPacket implements Cloneable{
     public static final byte BASIC_HEADER_LENGTH = 15 + Header.TASK_ID_LENGTH;
     public enum WAY {
-        /** 默认 */
         DEFAULT,
-        /** 服务器正常响应 */
-        SERVER_OK,
-        /** 服务器内部出错 */
-        SERVER_ERROR,
-        /** 服务器忙 */
-        SERVER_BUSY,
-        /** 服务不存在 */
-        SERVER_NULL,
-        /** 服务器拒绝 */
-        SERVER_REFUSE,
 
-        /** 发送数据 */
-        DATA_SEND,
-        /** 请求数据 */
-        DATA_REQUEST,
-        /** 修改数据 */
-        DATA_CHANGE,
-        /** 重置数据 */
-        DATA_RESET,
-        /** 更新数据 */
-        DATA_UPDATE,
+        REQUEST_Post,
+        REQUEST_Delete,
+        REQUEST_Update,
+        REQUEST_Get,
+
+        RESPONSE_Ok,
+        RESPONSE_Error,
+        RESPONSE_Succeed,
+        RESPONSE_Failed,
+        RESPONSE_NotHandler,
+        RESPONSE_NotResource,
+        RESPONSE_MethodNotAllowed,
+        RESPONSE_BadRequest,
+        RESPONSE_Unauthorized,
+        RESPONSE_Forbidden,
+        RESPONSE_Busy,
     }
-    private static class Header implements Cloneable{
+    private static class Header {
         private static final byte TASK_ID_LENGTH = 32;
         private long time;
         private short way, tailLength;
@@ -60,17 +55,9 @@ public class DataPacket implements Cloneable{
             bodySizes = new ArrayList<>();
             bodyMeatLengths = new ArrayList<>();
         }
-        @Override
-        public Header clone() {
-            try {
-                return (Header) super.clone();
-            } catch (CloneNotSupportedException e) {
-                throw new AssertionError();
-            }
-        }
     }
 
-    private Header header;
+    private final Header header;
     private final List<AbstractDataBody<?>> bodys;
     private byte[] tail;
     private TaskWrap taskWrap;
@@ -78,6 +65,19 @@ public class DataPacket implements Cloneable{
     private DataPacket() {
         header = new Header();
         bodys = new ArrayList<>();
+    }
+
+    public String formatPath() {
+        StringBuilder sb = new StringBuilder();
+        if (header.path != null) {
+            for (int i = 0; i < header.path.length; i++) {
+                if (i > 0) {
+                    sb.append("/");
+                }
+                sb.append(header.path[i]);
+            }
+        }
+        return sb.toString();
     }
 
     public static DataPacket build(WAY way, short... path) {
@@ -92,7 +92,7 @@ public class DataPacket implements Cloneable{
         }
         return dataPacket;
     }
-    public DataPacket attach(AbstractDataBody<?>... bodys) {
+    public final DataPacket attach(AbstractDataBody<?>... bodys) {
         if (this.bodys.size() + bodys.length > Byte.MAX_VALUE) {
             throw new ArithmeticException("Bodys too large (max=%d)".formatted(Byte.MAX_VALUE));
         }
@@ -105,7 +105,7 @@ public class DataPacket implements Cloneable{
         header.bodyCount = (byte) this.bodys.size();
         return this;
     }
-    public DataPacket attach(byte[] tail) {
+    public final DataPacket attach(byte[] tail) {
         if (tail.length > Short.MAX_VALUE) {
             throw new ArithmeticException("Tail too large (max=%d)".formatted(Short.MAX_VALUE));
         }
@@ -114,7 +114,7 @@ public class DataPacket implements Cloneable{
         return this;
     }
 
-    public DataPacket setTaskId(String taskId) {
+    public final DataPacket setTaskId(String taskId) {
         byte[] taskIdBytes = taskId.getBytes(StandardCharsets.UTF_8);
         if (taskIdBytes.length != Header.TASK_ID_LENGTH) {
             throw new ArithmeticException("TaskIdLength must be %d".formatted(Header.TASK_ID_LENGTH));
@@ -122,16 +122,16 @@ public class DataPacket implements Cloneable{
         this.header.taskId = taskIdBytes;
         return this;
     }
-    public DataPacket setTime(long time) {
+    public final DataPacket setTime(long time) {
         this.header.time = time;
         return this;
     }
-    public DataPacket setPacketIndex(byte packetIndex) {
+    public final DataPacket setPacketIndex(byte packetIndex) {
         this.header.packetIndex = packetIndex;
         return this;
     }
 
-    public int getCurrenHeaderLength() {
+    public final int getCurrenHeaderLength() {
         int length = BASIC_HEADER_LENGTH;
         if (header.path != null) {
             length += header.path.length * Short.BYTES;
@@ -139,61 +139,61 @@ public class DataPacket implements Cloneable{
         length += header.bodyIds.size() * (Long.BYTES * 2 + Short.BYTES);
         return length;
     }
-    public int getVariableHeaderLength() {
+    public final int getVariableHeaderLength() {
         return header.pathDepth * Short.BYTES + header.bodyCount * (Long.BYTES * 2 + Short.BYTES);
     }
-    public AbstractDataBody<?> getBody() {
+    public final AbstractDataBody<?> getBody() {
         if (bodys.isEmpty()) {
             return null;
         } else {
             return bodys.getFirst();
         }
     }
-    public List<AbstractDataBody<?>> getBodys() {
+    public final List<AbstractDataBody<?>> getBodys() {
         return bodys;
     }
-    public byte getBodyCount() {
+    public final byte getBodyCount() {
         return header.bodyCount;
     }
-    public long getBodyId(int index) {
+    public final long getBodyId(int index) {
         return header.bodyIds.get(index);
     }
-    public long getBodySize(int index) {
+    public final long getBodySize(int index) {
         return header.bodySizes.get(index);
     }
-    public short getBodyMeatLength(int index) {
+    public final short getBodyMeatLength(int index) {
         return header.bodyMeatLengths.get(index);
     }
-    public short getTailLength() {
+    public final short getTailLength() {
         return header.tailLength;
     }
-    public byte[] getTail() {
+    public final byte[] getTail() {
         return tail;
     }
-    public WAY getWay() {
+    public final WAY getWay() {
         return WAY.values()[header.way];
     }
-    public byte getPathDepth() {
+    public final byte getPathDepth() {
         return header.pathDepth;
     }
-    public short[] getPath() {
+    public final short[] getPath() {
         return header.path;
     }
 
-    public long getTime() {
+    public final long getTime() {
         return header.time;
     }
-    public String getTaskId() {
+    public final String getTaskId() {
         if (header.taskId == null) {
             return "";
         } else {
             return new String(header.taskId, StandardCharsets.UTF_8);
         }
     }
-    public byte getPacketIndex() {
+    public final byte getPacketIndex() {
         return header.packetIndex;
     }
-    public AbstractDataBody.TYPE getDataBodyType() {
+    public final AbstractDataBody.TYPE getDataBodyType() {
         if (bodys.isEmpty()) {
             return AbstractDataBody.TYPE.Basic;
         } else if (bodys.size() == 1) {
@@ -209,15 +209,15 @@ public class DataPacket implements Cloneable{
         }
     }
 
-    public DataPacket setTaskWrap(TaskWrap taskWrap) {
+    public final DataPacket setTaskWrap(TaskWrap taskWrap) {
         this.taskWrap = taskWrap;
         return setTaskId(taskWrap.getTask().getTaskId());
     }
-    public TaskWrap getTaskWrap() {
+    public final TaskWrap getTaskWrap() {
         return taskWrap;
     }
 
-    protected ByteBuffer headerToBuffer(ByteBuffer output) {
+    final ByteBuffer headerToBuffer(ByteBuffer output) {
         output.putLong(header.time);
         output.putShort(header.way);
         output.putShort(header.tailLength);
@@ -235,7 +235,7 @@ public class DataPacket implements Cloneable{
         }
         return output;
     }
-    protected static DataPacket basicHeaderFromBuffer(ByteBuffer input) {
+    static DataPacket basicHeaderFromBuffer(ByteBuffer input) {
         DataPacket dataPacket = new DataPacket();
         dataPacket.header.time = input.getLong();
         dataPacket.header.way = input.getShort();
@@ -247,7 +247,7 @@ public class DataPacket implements Cloneable{
         input.get(dataPacket.header.taskId);
         return dataPacket;
     }
-    protected void variableHeaderFormBuffer(ByteBuffer input) {
+    final void variableHeaderFormBuffer(ByteBuffer input) {
         header.path = new short[header.pathDepth];
         for (int i = 0; i < header.pathDepth; i++) {
             header.path[i] = input.getShort();
@@ -258,10 +258,10 @@ public class DataPacket implements Cloneable{
             header.bodyMeatLengths.add(input.getShort());
         }
     }
-    protected void setBodys(AbstractDataBody<?>... bodys) {
+    final void setBodys(AbstractDataBody<?>... bodys) {
         this.bodys.addAll(List.of(bodys));
     }
-    protected void setTail(byte[] tail) {
+    final void setTail(byte[] tail) {
         this.tail = tail;
     }
 
@@ -278,7 +278,6 @@ public class DataPacket implements Cloneable{
             }
         }
     }
-
     public static byte[] StringToBytes(String string) {
         if (string == null) {
             return new byte[0];
@@ -292,13 +291,11 @@ public class DataPacket implements Cloneable{
         return new String(bytes, StandardCharsets.UTF_8);
     }
 
+    /* 并没有完全实现深克隆 */
     @Override
     public DataPacket clone() {
         try {
             DataPacket copy = (DataPacket) super.clone();
-            if (this.header != null) {
-                copy.header = this.header.clone();
-            }
             if (this.tail != null) {
                 copy.tail = this.tail.clone();
             }
@@ -316,16 +313,9 @@ public class DataPacket implements Cloneable{
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        sb.append("{Time=").append(dateFormat.format(header.time)).append(", Way=").append(WAY.values()[header.way].name()).append(", Path=");
-        if (header.path != null) {
-            for (int i = 0; i < header.path.length; i++) {
-                if (i > 0) {
-                    sb.append("/");
-                }
-                sb.append(header.path[i]);
-            }
-        }
-        sb.append(", TaskId=").append(getTaskId()).append(", PacketIndex=").append(header.packetIndex).append(", Bodys=[");
+        sb.append("{Time=").append(dateFormat.format(header.time)).append(", Way=").append(WAY.values()[header.way].name())
+                .append(", Path=").append(formatPath()).append(", TaskId=").append(getTaskId())
+                .append(", PacketIndex=").append(header.packetIndex).append(", Bodys=[");
         for (AbstractDataBody<?> body : bodys) {
             sb.append("name=").append(body.getClass().getSimpleName());
             sb.append(", size=").append(body.getSize());

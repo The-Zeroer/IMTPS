@@ -69,18 +69,18 @@ public class DataPacketDispatcher {
         }
         ImtpsHandler handler = handlerRegistry.match(dataPacket.getPath());
         if (handler == null) {
-            log.warn("ImtpHandler{}缺失", dataPacket.getPath());
-            sessionManager.putDataPacket(imtpsSession, DataPacket.build(DataPacket.WAY.SERVER_NULL));
+            log.warn("ImtpHandler{}缺失", dataPacket.formatPath());
+            sessionManager.putDataPacket(imtpsSession, DataPacket.build(DataPacket.WAY.RESPONSE_NotHandler));
             return;
         }
         if (imtpsSession.getSessionName() == null && handler.isNeedVerify()) {
             log.warn("未验证的会话[{}]访问ImtpHandler[{}]", imtpsSession.getRemoteAddress(), handler.getName());
-            sessionManager.putDataPacket(imtpsSession, DataPacket.build(DataPacket.WAY.SERVER_REFUSE));
+            sessionManager.putDataPacket(imtpsSession, DataPacket.build(DataPacket.WAY.RESPONSE_Unauthorized));
             return;
         }
         if (handler.getWay() instanceof DataPacket.WAY way && !way.equals(dataPacket.getWay())) {
             log.warn("会话[{}]以错误的方式[{}]访问ImtpHandler[{}]", imtpsSession.getSessionName(), dataPacket.getWay().name(), handler.getName());
-            sessionManager.putDataPacket(imtpsSession, DataPacket.build(DataPacket.WAY.SERVER_REFUSE));
+            sessionManager.putDataPacket(imtpsSession, DataPacket.build(DataPacket.WAY.RESPONSE_MethodNotAllowed));
             return;
         }
         threadPool.submit(() -> {
@@ -88,7 +88,7 @@ public class DataPacketDispatcher {
                handler.execute(new HandlerContext(sessionManager, imtpsSession, dataPacket));
            } catch (Exception e) {
                log.error("ImtpHandler[{}]出现未捕获的异常", handler.getName(), e);
-               sessionManager.putDataPacket(imtpsSession, DataPacket.build(DataPacket.WAY.SERVER_ERROR));
+               sessionManager.putDataPacket(imtpsSession, DataPacket.build(DataPacket.WAY.RESPONSE_Error));
            }
         });
     }

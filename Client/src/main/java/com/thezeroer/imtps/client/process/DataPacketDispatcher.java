@@ -46,7 +46,7 @@ public class DataPacketDispatcher {
         packetCodec.setThreadPool(threadPool);
     }
 
-    public void registerHandler(HandlerRegistry.PathsMatcher matcher, ImtpsHandler handler) {
+    public void registerHandler(HandlerRegistry.PathMatcher matcher, ImtpsHandler handler) {
         handlerRegistry.register(matcher, handler);
         if (handler.getName() == null) {
             handler.setName(matcher.formatPath());
@@ -64,7 +64,7 @@ public class DataPacketDispatcher {
         }
         ImtpsHandler handler = handlerRegistry.match(dataPacket.getPath());
         if (handler == null) {
-            log.warn("ImtpHandler{}缺失", dataPacket.getPath());
+            log.warn("ImtpHandler{}缺失", dataPacket.formatPath());
             return;
         }
         threadPool.submit(() -> {

@@ -14,13 +14,13 @@ import java.io.IOException;
 public class ServerTest {
     public static void main(String[] args) throws IOException {
         IMTPS_Server imtpsServer = new IMTPS_Server();
-        imtpsServer.bindAllPort(10086, 0, 0);
+        imtpsServer.bindAllPort(7709, 7710, 7711);
         imtpsServer.registerHandler(new HandlerRegistry.PathsMatcher((short) 1, (short) 2), new PublicHandler(null) {
             @Override
             public void execute(HandlerContext handlerContext) {
                 try {
-                    handlerContext.putResponseDataPacket(DataPacket.build(DataPacket.WAY.SERVER_OK).attach(
-                            new TextDataBody("Hello World!"), new FileDataBody(new File("C:\\appverifUI.dll"))));
+                    handlerContext.putResponseDataPacket(DataPacket.build(DataPacket.WAY.RESPONSE_Ok).attach(
+                            new TextDataBody("Hello World!"), new FileDataBody(new File("D:\\TBRTZ\\Downloads\\Edge\\EVE空间站_3.4.1ω_x64.zip"))));
                 } catch (FileNotFoundException e) {
                     throw new RuntimeException(e);
                 }

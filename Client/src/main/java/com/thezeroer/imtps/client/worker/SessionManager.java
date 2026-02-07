@@ -353,6 +353,10 @@ public class SessionManager extends Thread {
     private void closeChannel(SelectionKey selectionKey) {
         try {
             imtpsSession.channelClosed((ImtpsChannel.TYPE) selectionKey.attachment());
+            imtpsEventCatch.onChannelClose((ImtpsChannel.TYPE) selectionKey.attachment());
+            if (selectionKey.attachment() == ImtpsChannel.TYPE.Control) {
+                imtpsEventCatch.onSessionClose();
+            }
         } catch (Exception ignored) {}
     }
     private void reconnection(ImtpsChannel.TYPE type) {

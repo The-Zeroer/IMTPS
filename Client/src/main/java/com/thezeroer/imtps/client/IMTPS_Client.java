@@ -142,7 +142,7 @@ public class IMTPS_Client {
      * @param handler 处理程序
      * @return {@link IMTPS_Client }
      */
-    public IMTPS_Client registerHandler(HandlerRegistry.PathsMatcher matcher, ImtpsHandler handler) {
+    public IMTPS_Client registerHandler(HandlerRegistry.PathMatcher matcher, ImtpsHandler handler) {
         dataPacketDispatcher.registerHandler(matcher, handler);
         return this;
     }

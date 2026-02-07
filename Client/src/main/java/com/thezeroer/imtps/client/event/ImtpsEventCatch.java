@@ -1,5 +1,7 @@
 package com.thezeroer.imtps.client.event;
 
+import com.thezeroer.imtps.client.session.channel.ImtpsChannel;
+
 /**
  * IMTPS 事件捕获
  *
@@ -20,4 +22,7 @@ public interface ImtpsEventCatch {
      * @param succeed 成功-true，失败-false
      */
     default void reconnection(boolean succeed) {}
+
+    default void onSessionClose() {}
+    default void onChannelClose(ImtpsChannel.TYPE type) {}
 }
